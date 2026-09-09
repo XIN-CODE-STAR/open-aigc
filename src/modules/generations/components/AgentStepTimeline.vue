@@ -124,7 +124,7 @@ function extractImageUrls(resultJson: string | null): string[] {
  * 后端将含附件的消息存为 JSON：`{"images": [...], "text": "..."}`。
  * 纯文本消息直接返回。返回值拆开 text 与 images，避免 base64 出现在文字区。
  */
-function parseUserContent(raw: string): { text: string; images: string[] } {
+function parseUserContent(raw: string | null): { text: string; images: string[] } {
   if (!raw) return { text: "", images: [] };
   try {
     const data = JSON.parse(raw);

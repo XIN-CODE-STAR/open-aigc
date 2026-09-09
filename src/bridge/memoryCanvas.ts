@@ -92,7 +92,7 @@ export async function getCanvas(id: string): Promise<MemoryCanvas | null> {
 }
 
 export async function deleteCanvas(id: string): Promise<void> {
-  return invokeNative("memory_canvas_v1_delete", voidResponse, {
+  await invokeNative("memory_canvas_v1_delete", voidResponse, {
     request: { id },
   });
 }
@@ -146,7 +146,7 @@ export async function updateNode(
 }
 
 export async function deleteNode(id: string): Promise<void> {
-  return invokeNative("memory_node_v1_delete", voidResponse, {
+  await invokeNative("memory_node_v1_delete", voidResponse, {
     request: { id },
   });
 }
@@ -178,7 +178,7 @@ export async function addEdge(
 }
 
 export async function deleteEdge(id: string): Promise<void> {
-  return invokeNative("memory_edge_v1_delete", voidResponse, {
+  await invokeNative("memory_edge_v1_delete", voidResponse, {
     request: { id },
   });
 }
@@ -197,7 +197,7 @@ export async function saveViewport(
   panX: number,
   panY: number,
 ): Promise<void> {
-  return invokeNative("memory_viewport_v1_save", voidResponse, {
+  await invokeNative("memory_viewport_v1_save", voidResponse, {
     request: { canvas_id: canvasId, zoom, pan_x: panX, pan_y: panY },
   });
 }

@@ -34,6 +34,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 
 import { useToast } from "../../../shared/ui/useToast";
+import CanvasNodeCard from "./CanvasNodeCard.vue";
 import type { MemoryNode, MemoryEdge } from "../../../bridge/memoryCanvas";
 import {
   addNode,
@@ -50,11 +51,9 @@ import {
 } from "../../../bridge/memoryCanvas";
 
 /** 右键菜单动作触发的节点级回调（经 flowNodes.data 注入卡片）。 */
-type NodeMenuAction = "clone" | "preview" | "download" | "color";
+type NodeMenuAction = "clone" | "preview" | "download" | "color" | "delete";
 
 const NOTE_COLORS = ["#fbbf24", "#60a5fa", "#34d399", "#f472b6"];
-
-import CanvasNodeCard from "./CanvasNodeCard.vue";
 
 // ─── Props / Emits ───
 
@@ -88,7 +87,7 @@ const lightboxUrl = ref<string | null>(null);
 const {
   fitView,
   setViewport,
-  screenToFlowPosition,
+  project,
   onNodeDragStop,
   onConnect,
   onEdgeDoubleClick,
@@ -332,15 +331,10 @@ onNodesChange(applyNodeChanges);
 onEdgesChange(applyEdgeChanges);
 
 // 视口变化持久化
-onMoveEnd(async ({ flow: flowInstance }) => {
+onMoveEnd(async ({ flowTransform }) => {
   if (!canvasId.value) return;
   try {
-    await saveViewport(
-      canvasId.value,
-      flowInstance.viewport.zoom,
-      flowInstance.viewport.x,
-      flowInstance.viewport.y,
-    );
+    await saveViewport(canvasId.value, flowTransform.zoom, flowTransform.x, flowTransform.y);
   } catch (e) {
     console.warn("[MemoryCanvas] save viewport failed:", e);
   }
@@ -397,7 +391,7 @@ async function onCanvasContextMenu(event: MouseEvent): Promise<void> {
   const target = event.target as HTMLElement;
   if (target.closest(".canvas-node") || target.closest(".canvas-toolbar")) return;
   event.preventDefault();
-  const flow = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+  const flow = project({ x: event.clientX, y: event.clientY });
   canvasMenu.value = { x: event.clientX, y: event.clientY, flowX: flow.x, flowY: flow.y };
 }
 
@@ -567,6 +561,23 @@ function downloadNodeImage(id: string): void {
   anchor.href = url;
   anchor.download = `${node?.summary || "canvas-image"}.png`;
   anchor.click();
+}
+
+/** 导出当前画布节点/边为 JSON 文件（含视口，便于离线备份）。 */
+function exportCanvasJson(): void {
+  const payload = {
+    canvasId: canvasId.value,
+    nodes: nodes.value,
+    edges: edges.value,
+    exportedAt: new Date().toISOString(),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `memory-canvas-${canvasId.value ?? "export"}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function cloneNode(id: string): void {

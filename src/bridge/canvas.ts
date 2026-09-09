@@ -89,7 +89,7 @@ export const canvasNodeSchema = z
     prompt: z.string().nullable(),
     status: canvasNodeStatusSchema.nullable(),
     refs: canvasNodeRefsSchema,
-    metadata: z.record(z.unknown()),
+    metadata: z.record(z.string(), z.unknown()),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -103,7 +103,7 @@ export const canvasEdgeSchema = z
     targetNodeId: z.string(),
     kind: canvasEdgeKindSchema,
     label: z.string().nullable(),
-    metadata: z.record(z.unknown()),
+    metadata: z.record(z.string(), z.unknown()),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -146,7 +146,7 @@ export async function canvasGet(id: string): Promise<CanvasRecord | null> {
 
 /** 删除画布 */
 export async function canvasDelete(id: string): Promise<void> {
-  return invokeNative("canvas_v1_delete", voidResponse, {
+  await invokeNative("canvas_v1_delete", voidResponse, {
     request: { id },
   });
 }
@@ -182,7 +182,7 @@ export async function canvasUpdateNode(
 
 /** 删除节点 */
 export async function canvasDeleteNode(nodeId: string): Promise<void> {
-  return invokeNative("canvas_v1_delete_node", voidResponse, {
+  await invokeNative("canvas_v1_delete_node", voidResponse, {
     request: { nodeId },
   });
 }
@@ -209,7 +209,7 @@ export async function canvasAddEdge(
 
 /** 删除边 */
 export async function canvasDeleteEdge(edgeId: string): Promise<void> {
-  return invokeNative("canvas_v1_delete_edge", voidResponse, {
+  await invokeNative("canvas_v1_delete_edge", voidResponse, {
     request: { nodeId: edgeId },
   });
 }

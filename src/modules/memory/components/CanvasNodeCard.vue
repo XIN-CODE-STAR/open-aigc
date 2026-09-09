@@ -22,7 +22,7 @@ const props = defineProps<{
     compact?: boolean;
     onDelete?: () => void;
     onSaveSummary?: (text: string) => void;
-    onMenuAction?: (action: "clone" | "preview" | "download" | "color") => void;
+    onMenuAction?: (action: "clone" | "preview" | "download" | "color" | "delete") => void;
   };
 }>();
 
@@ -38,7 +38,7 @@ function openMenu(event: MouseEvent): void {
   menuOpen.value = true;
 }
 
-function menuAction(action: "clone" | "preview" | "download" | "color"): void {
+function menuAction(action: "clone" | "preview" | "download" | "color" | "delete"): void {
   menuOpen.value = false;
   props.data.onMenuAction?.(action);
 }

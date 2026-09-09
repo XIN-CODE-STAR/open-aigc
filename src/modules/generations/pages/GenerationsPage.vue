@@ -685,10 +685,10 @@ watch(
 
       // 当任务开始执行时，添加 pending 节点
       if (inv.status === "running" && prev !== "running") {
-        const prompt: string = inv.inputJson
+        const prompt: string = inv.argumentsJson
           ? (() => {
               try {
-                return JSON.parse(inv.inputJson).prompt || inv.toolName;
+                return JSON.parse(inv.argumentsJson).prompt || inv.toolName;
               } catch {
                 return inv.toolName;
               }

@@ -346,7 +346,7 @@ export function useAgentConversation() {
         const { resultUrl } = event.payload;
         if (!resultUrl || !currentConversation.value) return;
         // 把生成结果作为 assistant 消息注入聊天
-        const resultMessage = {
+        const resultMessage: MessageRecord = {
           id: `gen-result-${event.payload.attemptId}`,
           conversationId: currentConversation.value.id,
           role: "assistant",
