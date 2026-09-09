@@ -8,7 +8,7 @@ OPEN AIGC 当前以 Windows x64 为首要开发与发布环境。开始前运行
 ./scripts/check-prereqs.ps1
 ```
 
-最低基线为 Node.js 20.10.0、pnpm 11.7.0、Rust stable MSVC、Visual Studio C++ 工具链、Windows SDK 和 WebView2 Runtime。仓库通过 `pnpm-lock.yaml` 与 `src-tauri/Cargo.lock` 固定依赖解析结果。
+最低基线为 Node.js 20.12.0（pnpm 11 要求 `util.styleText`，Node 20.10 及更早无法运行）、pnpm 11.7.0、Rust stable MSVC、Visual Studio C++ 工具链、Windows SDK 和 WebView2 Runtime。仓库通过 `pnpm-lock.yaml` 与 `src-tauri/Cargo.lock` 固定依赖解析结果。
 
 ## 安装与启动
 

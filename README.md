@@ -83,7 +83,7 @@
 环境要求：
 
 - Windows x64 + WebView2 Runtime
-- Node.js ≥ 20.10.0、pnpm 11.7.0（`packageManager` 已固定）
+- Node.js ≥ 20.12.0、pnpm 11.7.0（`packageManager` 已固定）
 - Rust stable MSVC（rustfmt + clippy）、Visual Studio C++ 工具链与 Windows SDK
 
 ```powershell
