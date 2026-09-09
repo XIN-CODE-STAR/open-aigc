@@ -217,7 +217,6 @@ impl RelationDiscoveryService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::relation_candidate::CandidateStatus;
 
     #[test]
     fn discovery_options_default() {

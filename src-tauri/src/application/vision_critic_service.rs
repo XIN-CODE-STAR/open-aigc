@@ -89,6 +89,7 @@ impl VisionCriticService {
     /// 使用 LLM Vision API 评价一张图片。
     ///
     /// 如果未提供 api_key，自动从 CredentialService 查找。
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate_with_vision(
         &self,
         project_id: &str,

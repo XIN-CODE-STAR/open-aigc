@@ -895,8 +895,7 @@ pub fn parse_plan_from_text(text: &str) -> Vec<PlanStep> {
         // 匹配 "1. xxx", "1、xxx", "- xxx", "• xxx" 等格式
         let desc = if let Some(rest) = trimmed.strip_prefix(|c: char| c.is_ascii_digit()) {
             // "1. xxx" or "1、xxx"
-            rest.trim_start_matches(|c: char| c == '.' || c == '、' || c == ' ')
-                .trim()
+            rest.trim_start_matches(['.', '、', ' ']).trim()
         } else if let Some(rest) = trimmed.strip_prefix('-') {
             rest.trim()
         } else if let Some(rest) = trimmed.strip_prefix('•') {

@@ -62,6 +62,7 @@ impl MemoryCanvasService {
             .delete_canvas(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn add_node(
         &self,
         canvas_id: &str,
@@ -89,6 +90,7 @@ impl MemoryCanvasService {
             .add_node(draft)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_node(
         &self,
         id: &str,

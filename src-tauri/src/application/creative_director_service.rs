@@ -158,7 +158,7 @@ impl CreativeDirectorService {
 // ─── Prompt 构建 ───
 
 fn build_director_analysis_prompt(
-    user_message: &str,
+    _user_message: &str,
     existing_state: Option<&CreativeStateRecord>,
 ) -> String {
     let mut prompt = String::from(

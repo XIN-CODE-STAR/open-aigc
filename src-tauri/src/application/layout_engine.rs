@@ -15,20 +15,15 @@ use crate::domain::canvas::CanvasPosition;
 // ──────────────────────────────────────────────────────────────────
 
 /// 布局策略枚举。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LayoutStrategy {
     /// 左到右水平时间线（默认）。
+    #[default]
     Timeline,
     /// 网格布局（按 scene × shot）。
     Grid,
     /// 树形层次结构。
     Hierarchical,
-}
-
-impl Default for LayoutStrategy {
-    fn default() -> Self {
-        Self::Timeline
-    }
 }
 
 // ──────────────────────────────────────────────────────────────────

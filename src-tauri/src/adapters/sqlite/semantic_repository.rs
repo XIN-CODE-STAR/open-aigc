@@ -8,7 +8,6 @@ use std::sync::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::application::error::AppError;
-use crate::domain::common::InferenceSource;
 use crate::domain::relation_candidate::{
     CandidateStatus, RelationCandidate, RelationCandidateDraft, RelationSource,
 };
@@ -256,7 +255,8 @@ impl SemanticRepository for SqliteSemanticRepository {
         draft: &RelationCandidateDraft,
     ) -> Result<RelationCandidate, AppError> {
         let id = uuid::Uuid::new_v4().to_string();
-        let now = crate::adapters::sqlite::now_rfc3339().map_err(|e| AppError::StateUnavailable)?;
+        let now =
+            crate::adapters::sqlite::now_rfc3339().map_err(|_e| AppError::StateUnavailable)?;
         let source_str = draft.source.as_str();
 
         let connection = self
@@ -347,7 +347,8 @@ impl SemanticRepository for SqliteSemanticRepository {
     }
 
     fn update_candidate_status(&self, id: &str, status: CandidateStatus) -> Result<(), AppError> {
-        let now = crate::adapters::sqlite::now_rfc3339().map_err(|e| AppError::StateUnavailable)?;
+        let now =
+            crate::adapters::sqlite::now_rfc3339().map_err(|_e| AppError::StateUnavailable)?;
         let status_str = status.as_str();
 
         let connection = self
@@ -372,6 +373,7 @@ impl SemanticRepository for SqliteSemanticRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::common::InferenceSource;
     use rusqlite::Connection;
 
     fn setup_db() -> Connection {

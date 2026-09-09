@@ -156,7 +156,7 @@ impl EditUnderstandingService {
         let prompt_patch_json = understanding
             .prompt_patch
             .as_ref()
-            .map(|p| serde_json::to_string(p))
+            .map(serde_json::to_string)
             .transpose()
             .map_err(|e| AppError::new("serialize prompt patch", e))?;
 
@@ -166,7 +166,7 @@ impl EditUnderstandingService {
             project_id: request.project_id.clone(),
             plan_summary: format!(
                 "基于反馈「{}」生成修改计划，意图={}",
-                &request.feedback_text.chars().take(80).collect::<String>(),
+                request.feedback_text.chars().take(80).collect::<String>(),
                 understanding.intent
             ),
             operation_type,
@@ -177,7 +177,7 @@ impl EditUnderstandingService {
             parameter_patch_json: understanding
                 .parameter_patch
                 .as_ref()
-                .map(|p| serde_json::to_string(p))
+                .map(serde_json::to_string)
                 .transpose()
                 .map_err(|e| AppError::new("serialize parameter patch", e))?,
             reference_asset_patch_json: None,

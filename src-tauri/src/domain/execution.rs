@@ -18,8 +18,10 @@ use crate::domain::creative_plan::AssetType;
 /// 资产来源（领域概念：描述资产从何而来）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ArtifactOrigin {
     /// 远端 AI 生成（已提交，尚未下载）。
+    #[default]
     Generated,
     /// 已下载到本地。
     Downloaded,
@@ -29,12 +31,6 @@ pub enum ArtifactOrigin {
     Imported,
     /// 测试用 Mock。
     Mock,
-}
-
-impl Default for ArtifactOrigin {
-    fn default() -> Self {
-        Self::Generated
-    }
 }
 
 // ─── Provenance ───

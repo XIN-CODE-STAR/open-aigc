@@ -29,20 +29,15 @@ use crate::ports::canvas_repository::CanvasRepository;
 // ──────────────────────────────────────────────────────────────────
 
 /// 画布节点布局策略。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum LayoutStrategy {
     /// 左到右水平时间线（默认）。
+    #[default]
     Timeline,
     /// 网格布局（按 scene × shot）。
     Grid,
     /// 树形层次结构。
     Hierarchical,
-}
-
-impl Default for LayoutStrategy {
-    fn default() -> Self {
-        Self::Timeline
-    }
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -115,7 +110,7 @@ impl ApplyScriptPlanService {
     /// 不创建 MangaProject/Scene/Shot（由调用方负责）。
     pub fn apply(
         &self,
-        workspace_id: &str,
+        _workspace_id: &str,
         canvas_id: &str,
         plan: &ScriptPlan,
         strategy: LayoutStrategy,

@@ -10,7 +10,7 @@ use crate::{
     application::canvas_domain_service::CanvasDomainService,
     domain::canvas::{
         CanvasEdge, CanvasEdgeDraft, CanvasEdgeKind, CanvasNode, CanvasNodeDraft, CanvasNodeKind,
-        CanvasNodeRefs, CanvasNodeStatus, CanvasPosition, CanvasRecord, CanvasSize, NodePatch,
+        CanvasNodeRefs, CanvasNodeStatus, CanvasPosition, CanvasRecord, NodePatch,
     },
 };
 

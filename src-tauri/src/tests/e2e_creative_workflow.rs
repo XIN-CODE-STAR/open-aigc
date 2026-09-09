@@ -16,10 +16,8 @@ use crate::{
         edit_understanding_service::EditUnderstandingService,
     },
     domain::{
-        creative_memory::{
-            CreativeMemoryDraft, MemoryFilter, MemoryScope, MemorySource, MemoryType,
-        },
-        edit::{EditContextType, EditPlanStatus, EditRequestDraft, EditRequestStatus},
+        creative_memory::{CreativeMemoryDraft, MemoryFilter, MemoryType},
+        edit::{EditRequestDraft, EditRequestStatus},
         review::{
             CommercialScores, ContentScores, IssueSeverity, RequirementScores, ReviewDecision,
             ReviewDimensionLayer, ReviewIssue, TechnicalScores, VideoGenerationGate, VisualScores,
@@ -366,7 +364,7 @@ fn e2e_multiple_reviews_queried_by_project() {
 
     // 第一次评价（好）
     let (req, vis, con, com, tec, issues) = good_scores();
-    let report1 = critic
+    let _report1 = critic
         .evaluate_asset(
             PROJECT_ID.into(),
             "asset-v1".into(),
@@ -647,11 +645,11 @@ fn e2e_export_compliance_check() {
     use crate::domain::review::{CommercialUseStatus, ContentGuardStatus};
 
     // 场景1：所有资产合规
-    let licenses_ok = vec![
+    let licenses_ok = [
         (CommercialUseStatus::Clear, true),
         (CommercialUseStatus::Clear, true),
     ];
-    let guards_ok = vec![ContentGuardStatus::Passed, ContentGuardStatus::Passed];
+    let guards_ok = [ContentGuardStatus::Passed, ContentGuardStatus::Passed];
 
     let can_export = licenses_ok
         .iter()
@@ -660,11 +658,11 @@ fn e2e_export_compliance_check() {
     assert!(can_export, "All assets compliant should allow export");
 
     // 场景2：有阻断资产
-    let licenses_blocked = vec![
+    let licenses_blocked = [
         (CommercialUseStatus::Clear, true),
         (CommercialUseStatus::Blocked, false),
     ];
-    let guards_ok = vec![ContentGuardStatus::Passed, ContentGuardStatus::Passed];
+    let guards_ok = [ContentGuardStatus::Passed, ContentGuardStatus::Passed];
 
     let can_export = licenses_blocked
         .iter()
@@ -673,7 +671,7 @@ fn e2e_export_compliance_check() {
     assert!(!can_export, "Blocked asset should prevent export");
 
     // 场景3：需要审核
-    let licenses_review = vec![(CommercialUseStatus::NeedsReview, true)];
+    let licenses_review = [(CommercialUseStatus::NeedsReview, true)];
     let needs_review = licenses_review
         .iter()
         .any(|(s, _)| *s == CommercialUseStatus::NeedsReview);

@@ -10,7 +10,6 @@
 
 use crate::domain::script_plan::{
     PlannedScene, PlannedShot, ScriptPlan, ScriptPlanDraft, ScriptPlanError, MAX_SCENES,
-    MAX_SHOTS_PER_SCENE,
 };
 
 // ──────────────────────────────────────────────────────────────────
@@ -51,7 +50,6 @@ impl ScriptParserService {
 
         // Step 2: Generate shots for each scene
         let mut scenes: Vec<PlannedScene> = Vec::new();
-        let mut total_shots: usize = 0;
 
         for (i, scene_text) in raw_scenes.iter().enumerate().take(max_scenes) {
             let scene_index = (i + 1) as u32;
@@ -68,7 +66,7 @@ impl ScriptParserService {
                 .filter(|s| !s.is_empty())
                 .collect();
 
-            let shot_count = sentences.len().min(3).max(1);
+            let shot_count = sentences.len().clamp(1, 3);
             let mut shots: Vec<PlannedShot> = Vec::new();
 
             for j in 0..shot_count {
@@ -89,7 +87,6 @@ impl ScriptParserService {
                     character_refs: Self::extract_character_refs(sentence),
                     style_override: None,
                 });
-                total_shots += 1;
             }
 
             scenes.push(PlannedScene {

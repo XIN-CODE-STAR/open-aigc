@@ -117,7 +117,7 @@ impl GenerationFacade for MockGenerationFacade {
         eprintln!(
             "[Facade] mock submit: {:?}, prompt={}...",
             request.asset_type,
-            &request.prompt.chars().take(30).collect::<String>()
+            request.prompt.chars().take(30).collect::<String>()
         );
 
         Ok(GenerationOutput {

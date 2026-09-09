@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use crate::{application::error::AppError, ports::reloadable::Reloadable};
 
 // ──────────────────────────────────────────────────────────────────

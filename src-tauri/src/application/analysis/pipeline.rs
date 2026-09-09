@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::application::error::AppError;
 use crate::application::semantic::normalizer::SemanticNormalizer;
-use crate::domain::analysis::{AnalysisJob, AnalysisJobType};
 use crate::domain::semantic::ArtifactSemanticProfile;
 use crate::ports::parser_port::{ParseRequest, ParserPort};
 use crate::ports::semantic_repository::SemanticRepository;
@@ -175,8 +174,7 @@ pub struct ParserInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::common::InferenceSource;
-    use crate::domain::semantic::{SemanticEntity, SemanticTag};
+
     use crate::ports::parser_port::{
         ParseError, ParseResult, ParserInfo as PortParserInfo, ParserPort,
     };

@@ -152,21 +152,17 @@ impl TaskKind {
 /// 任务优先级。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TaskPriority {
     /// 紧急（用户交互阻塞）。
     Critical = 0,
     /// 高优先级。
     High = 1,
     /// 正常（默认）。
+    #[default]
     Normal = 2,
     /// 低优先级（后台任务）。
     Low = 3,
-}
-
-impl Default for TaskPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 // ─── TaskRecord ───

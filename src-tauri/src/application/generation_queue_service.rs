@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use crate::{
-    adapters::sqlite::generation_attempt_repository::SqliteGenerationAttemptRepository,
     application::error::AppError,
     domain::generation::{
         AttemptStatus, GenerationAttemptDraft, GenerationAttemptRecord, GenerationErrorKind,

@@ -198,6 +198,7 @@ pub struct CreativeMemoryDraft {
 }
 
 impl CreativeMemoryDraft {
+    #[allow(clippy::too_many_arguments)]
     pub fn try_new(
         memory_type: String,
         scope: String,

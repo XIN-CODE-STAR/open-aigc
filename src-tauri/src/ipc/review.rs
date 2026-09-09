@@ -105,7 +105,7 @@ pub fn content_guard_v1_get_report(
     let target_id = request["targetId"].as_str();
 
     // 优先查已有报告
-    if let Some(ref tid) = target_id {
+    if let Some(tid) = target_id {
         if let Ok(Some(report)) = service.get_latest_guard_report(target_type, tid) {
             return serde_json::to_value(report).map_err(|e| {
                 eprintln!("serialize guard report: {e}");

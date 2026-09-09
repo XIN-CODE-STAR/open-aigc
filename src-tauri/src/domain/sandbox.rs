@@ -16,19 +16,15 @@ use serde::{Deserialize, Serialize};
 /// 网络访问策略。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum NetworkPolicy {
     /// 允许所有网络访问。
     AllowAll,
     /// 只允许已知安全域名（Provider API、下载 CDN）。
+    #[default]
     AllowKnown,
     /// 禁止所有网络访问。
     DenyAll,
-}
-
-impl Default for NetworkPolicy {
-    fn default() -> Self {
-        Self::AllowKnown
-    }
 }
 
 // ─── SandboxPolicy ───

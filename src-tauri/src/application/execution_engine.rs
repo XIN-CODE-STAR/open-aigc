@@ -71,6 +71,7 @@ impl ExecutionEngine {
     }
 
     /// 执行阶段：逐步执行计划中的每个步骤。
+    #[allow(clippy::too_many_arguments)] // 执行上下文参数随会话状态自然增长，暂不打包
     pub fn run_execution_phase(
         &self,
         app: &tauri::AppHandle,
@@ -241,6 +242,7 @@ impl ExecutionEngine {
     }
 
     /// 执行单个计划步骤的工具循环。
+    #[allow(clippy::too_many_arguments)] // 循环状态以可变引用传入，避免额外的状态结构体
     fn execute_single_step(
         &self,
         app: &tauri::AppHandle,
@@ -957,7 +959,7 @@ fn strip_base64_images(content: &str) -> String {
         if let Some(data_start) = remaining[start..].find("base64,") {
             let abs_data_start = start + data_start + 7;
             let abs_end = remaining[abs_data_start..]
-                .find(|c: char| c == '"' || c == '\'' || c == ',' || c == '\n' || c == '}')
+                .find(['"', '\'', ',', '\n', '}'])
                 .map(|p| abs_data_start + p)
                 .unwrap_or(remaining.len());
             let before = &remaining[..start];

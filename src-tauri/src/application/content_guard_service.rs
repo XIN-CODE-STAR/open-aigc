@@ -178,7 +178,7 @@ impl LlmContentGuard {
         let adapter = self
             .vision_adapters
             .iter()
-            .find(|a| a.adapter_id() == &self.default_adapter_id)
+            .find(|a| a.adapter_id() == self.default_adapter_id)
             .ok_or_else(|| {
                 AppError::new(
                     "guard adapter not found",
@@ -211,7 +211,7 @@ impl LlmContentGuard {
         let adapter = self
             .vision_adapters
             .iter()
-            .find(|a| a.adapter_id() == &self.default_adapter_id)
+            .find(|a| a.adapter_id() == self.default_adapter_id)
             .ok_or_else(|| {
                 AppError::new(
                     "guard adapter not found",
@@ -405,9 +405,9 @@ impl EnhancedContentGuardRules {
                     }));
                 }
             }
-            "xiaohongshu" | "red" => {
+            "xiaohongshu" | "red"
                 // 小红书特殊规则
-                if text.contains("广告") || text.contains("推广") {
+                if (text.contains("广告") || text.contains("推广")) => {
                     checks.push(serde_json::json!({
                         "category": "commercial_compliance",
                         "status": "warn",
@@ -416,7 +416,6 @@ impl EnhancedContentGuardRules {
                         "platform_rule": "小红书社区规范"
                     }));
                 }
-            }
             _ => {}
         }
 

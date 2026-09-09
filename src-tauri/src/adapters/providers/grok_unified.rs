@@ -46,7 +46,7 @@ impl GrokUnifiedAdapter {
     }
 
     /// 从 CredentialContext 提取 API Key。
-    fn api_key<'a>(credential: &'a CredentialContext) -> Result<&'a str, ProviderError> {
+    fn api_key(credential: &CredentialContext) -> Result<&str, ProviderError> {
         credential
             .api_key()
             .ok_or_else(|| ProviderError::ConfigInvalid("missing api_key in credential".into()))

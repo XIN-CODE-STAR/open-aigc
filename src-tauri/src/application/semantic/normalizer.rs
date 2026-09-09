@@ -1,8 +1,4 @@
-use std::sync::Arc;
-
-use crate::domain::semantic::{
-    ArtifactSemanticProfile, SemanticEntity, SemanticRelation, SemanticTag,
-};
+use crate::domain::semantic::{ArtifactSemanticProfile, SemanticEntity, SemanticTag};
 use crate::ports::parser_port::ParseResult;
 
 /// Semantic normalizer that unifies different model outputs into a canonical schema.
@@ -191,7 +187,6 @@ impl SemanticNormalizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::common::InferenceSource;
 
     #[test]
     fn normalize_creates_correct_profile() {

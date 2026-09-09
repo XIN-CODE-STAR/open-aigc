@@ -555,7 +555,7 @@ impl JimengConnector {
             .set("Content-Type", "application/json")
             .set("Accept", "application/json")
             .send_json(&body);
-        let mut resp = match resp_raw {
+        let resp = match resp_raw {
             Ok(resp) => resp,
             Err(e) => {
                 eprintln!("[Jimeng] i2i proxy request failed: {e}");
@@ -686,7 +686,7 @@ impl JimengConnector {
 
                     if status >= 400 {
                         return Err(ProviderError::Remote {
-                            status: status as u16,
+                            status,
                             body: body_text[..body_text.len().min(300)].to_owned(),
                         });
                     }
@@ -706,7 +706,7 @@ impl JimengConnector {
                             eprintln!("[Jimeng] proxy error: code={code}, msg={msg}");
                             // 登录失效等错误不应 fallback 到原生 API（原生也会失败）
                             return Err(ProviderError::Remote {
-                                status: status as u16,
+                                status,
                                 body: msg.to_owned(),
                             });
                         }
@@ -936,7 +936,7 @@ impl JimengConnector {
 
                 if status >= 400 {
                     return Err(ProviderError::Remote {
-                        status: status as u16,
+                        status,
                         body: body_text[..body_text.len().min(300)].to_owned(),
                     });
                 }
@@ -953,7 +953,7 @@ impl JimengConnector {
                             .and_then(|v| v.as_str())
                             .unwrap_or("代理返回错误");
                         return Err(ProviderError::Remote {
-                            status: status as u16,
+                            status,
                             body: msg.to_owned(),
                         });
                     }
@@ -1096,10 +1096,7 @@ fn classify_jimeng_error(error: ureq::Error) -> ProviderError {
             if status == 401 || status == 403 {
                 ProviderError::ConfigInvalid(format!("登录态失效（HTTP {status}）: {body}"))
             } else {
-                ProviderError::Remote {
-                    status: status as u16,
-                    body,
-                }
+                ProviderError::Remote { status, body }
             }
         }
         _ => {
@@ -1161,8 +1158,6 @@ fn translate_video_model_for_proxy(model: &str) -> String {
 /// 解析 ISO Base Media File Format 的 moov/mvhd/tkhd box。
 /// 返回 (duration_secs, width, height)，解析失败时返回 None。
 fn parse_mp4_metadata(path: &Path) -> (Option<f64>, Option<u32>, Option<u32>) {
-    use std::io::Read;
-
     let data = match std::fs::read(path) {
         Ok(d) => d,
         Err(_) => return (None, None, None),

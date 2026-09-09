@@ -129,6 +129,7 @@ fn node_display_text(summary: Option<&str>, payload_json: &str) -> String {
 ///
 /// - `query` 为 None 或空：返回全量画布概览（按类型分组）。
 /// - `query` 有值：按词项重合度检索最相关的 `max_nodes` 个节点。
+///
 /// 画布不存在或没有可用内容时返回 None。
 pub fn load_working_memory_context(
     workspace_path: &Path,

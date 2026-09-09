@@ -60,7 +60,7 @@ impl CredentialManager {
     ) -> Result<Option<CredentialContext>, AppError> {
         let db_path = self.service.database_path();
         eprintln!("[CredentialManager] resolve_resource_account: id={account_id}, db={db_path:?}");
-        let conn = rusqlite::Connection::open(&db_path)
+        let conn = rusqlite::Connection::open(db_path)
             .map_err(|e| AppError::new("open db for resource_account", e))?;
 
         let mut stmt = conn

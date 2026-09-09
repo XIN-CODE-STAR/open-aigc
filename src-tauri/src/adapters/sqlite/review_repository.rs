@@ -6,7 +6,6 @@
 use std::path::Path;
 
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
-use uuid::Uuid;
 
 use super::now_rfc3339;
 use crate::{
@@ -127,7 +126,7 @@ impl ReviewRepository for SqliteReviewRepository {
             ));
             params_vec.push(Box::new(limit));
         } else {
-            sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?2"));
+            sql.push_str(" ORDER BY created_at DESC LIMIT ?2");
             params_vec.push(Box::new(limit));
         }
 

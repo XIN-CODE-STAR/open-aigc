@@ -1,3 +1,7 @@
+// 路线图上的模块（视觉推理、嵌入、子代理、布局引擎、提示词编译等）接口先行、
+// 尚未接入运行时；在正式接线前允许存在未使用项。
+#![allow(dead_code)]
+
 mod adapters;
 mod application;
 mod connectors;
@@ -409,7 +413,7 @@ pub fn run() {
             app.manage(crate::application::canvas_domain_service::CanvasDomainService::new(canvas_domain_repo));
 
             // RelationDiscoveryService + ContextOrchestrator。
-            let relation_discovery_service = std::sync::Arc::new(
+            let _relation_discovery_service = std::sync::Arc::new(
                 crate::application::semantic::relation_discovery_service::RelationDiscoveryService::new(
                     std::sync::Arc::clone(&semantic_retrieval_service),
                     std::sync::Arc::clone(&semantic_repo),

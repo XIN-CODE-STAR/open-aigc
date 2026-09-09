@@ -5,7 +5,6 @@
 //! 每个工具声明输入/输出 schema、副作用、权限和确认要求。
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 /// 工具类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

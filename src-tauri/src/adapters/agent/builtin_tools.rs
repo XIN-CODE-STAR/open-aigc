@@ -539,13 +539,10 @@ fn execute_generation(
             })?;
 
     // 使用 enriched_prompt 创建任务
-    let model_name = args.model_name.clone().unwrap_or_else(|| {
-        if tool_name == TOOL_IMAGE_GENERATION {
-            "default".to_owned()
-        } else {
-            "default".to_owned()
-        }
-    });
+    let model_name = args
+        .model_name
+        .clone()
+        .unwrap_or_else(|| "default".to_owned());
     let draft = crate::domain::generation::GenerationTaskDraft::try_new(
         ctx.workspace_id.clone(),
         provider_id.clone(),
@@ -927,7 +924,7 @@ fn read_file_as_data_url(path: &str) -> Result<String, String> {
 
 /// 执行图片语义分析：使用视觉模型生成描述、标签、实体。
 fn execute_canvas_search(
-    executor: &BuiltinToolExecutor,
+    _executor: &BuiltinToolExecutor,
     ctx: &ToolContext,
     arguments: &str,
 ) -> Result<ToolExecutionResult, AgentToolError> {
@@ -959,7 +956,7 @@ fn execute_canvas_search(
 }
 
 fn execute_canvas_add_note(
-    executor: &BuiltinToolExecutor,
+    _executor: &BuiltinToolExecutor,
     ctx: &ToolContext,
     arguments: &str,
 ) -> Result<ToolExecutionResult, AgentToolError> {
@@ -1008,7 +1005,7 @@ fn execute_canvas_add_note(
 }
 
 fn execute_canvas_connect(
-    executor: &BuiltinToolExecutor,
+    _executor: &BuiltinToolExecutor,
     ctx: &ToolContext,
     arguments: &str,
 ) -> Result<ToolExecutionResult, AgentToolError> {
@@ -1249,7 +1246,7 @@ fn execute_reason_about_asset(
     };
 
     // 构造推理指令，包含问题和上下文
-    let instruction = if let Some(context) = &args.context {
+    let _instruction = if let Some(context) = &args.context {
         format!("{}\n\n上下文信息：\n{}", args.question, context)
     } else {
         args.question.clone()

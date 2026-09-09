@@ -6,7 +6,6 @@ use std::path::Path;
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use super::now_rfc3339;
 use crate::{
     domain::edit::{
         EditContextType, EditOperationType, EditPlanRecord, EditPlanStatus, EditRequestRecord,
@@ -347,6 +346,7 @@ fn map_edit_plan(row: &rusqlite::Row<'_>) -> rusqlite::Result<EditPlanRecord> {
 mod tests {
     use tempfile::tempdir;
 
+    use super::super::now_rfc3339;
     use super::*;
     use crate::{
         adapters::sqlite::workspace_repository::SqliteWorkspaceRepository,

@@ -9,13 +9,8 @@
 //! 设计：MemoryRuntime 是 MemoryContextBuilder 的上层包装，
 //! 增加了 EventBus 集成和自动存储能力。
 
-use std::sync::Arc;
-
 use crate::{
-    application::{
-        event_bus::{DomainEvent, EventBus, EventListener},
-        memory_context_builder::MemoryContextBuilder,
-    },
+    application::{event_bus::EventBus, memory_context_builder::MemoryContextBuilder},
     domain::agent::MessageRecord,
     ports::memory_service::MemoryServicePort,
 };

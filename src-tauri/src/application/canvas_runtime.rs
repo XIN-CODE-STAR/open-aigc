@@ -14,9 +14,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::application::error::AppError;
-use crate::domain::canvas::{
-    CanvasEdgeDraft, CanvasNodeDraft, CanvasNodeKind, CanvasNodeRefs, CanvasPosition, NodePatch,
-};
+use crate::domain::canvas::{CanvasEdgeDraft, CanvasNodeDraft, NodePatch};
 use crate::domain::canvas_command::{CanvasCommand, CanvasCommandResult, UndoToken};
 use crate::ports::canvas_repository::CanvasRepository;
 
@@ -279,6 +277,7 @@ impl CanvasRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::canvas::{CanvasNodeKind, CanvasPosition};
 
     // Note: Full integration tests require a real CanvasRepository mock.
     // These are structural tests to verify the command pattern logic.

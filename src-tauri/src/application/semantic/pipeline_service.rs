@@ -18,8 +18,8 @@
 use std::sync::Arc;
 
 use crate::application::error::AppError;
-use crate::domain::semantic::{ArtifactSemanticProfile, SemanticProfileDraft};
-use crate::ports::captioning_port::{CaptionError, CaptionRequest, CaptioningPort};
+use crate::domain::semantic::ArtifactSemanticProfile;
+use crate::ports::captioning_port::{CaptionRequest, CaptioningPort};
 use crate::ports::semantic_repository::SemanticRepository;
 
 // ──────────────────────────────────────────────────────────────────

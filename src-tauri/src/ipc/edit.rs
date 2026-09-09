@@ -6,8 +6,7 @@ use tauri::State;
 
 use crate::{
     application::edit_understanding_service::EditUnderstandingService,
-    domain::edit::{EditContextType, EditRequestDraft},
-    ipc::error::IpcError,
+    domain::edit::EditRequestDraft, ipc::error::IpcError,
 };
 
 /// 提交用户自然语言反馈。

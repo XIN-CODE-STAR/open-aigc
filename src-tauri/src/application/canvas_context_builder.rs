@@ -11,8 +11,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::domain::canvas::{
-    CanvasEdge, CanvasEdgeKind, CanvasNode, CanvasNodeKind, CanvasPosition, ContextBudget,
-    ContextQuery, ContextualNode, DistanceCategory, RefFilter, SemanticRelation,
+    CanvasEdge, CanvasEdgeKind, CanvasNode, CanvasNodeKind, ContextBudget, ContextQuery,
+    ContextualNode, DistanceCategory, RefFilter, SemanticRelation,
 };
 
 // ──────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ impl CanvasContextBuilder {
         let mut relations = Vec::new();
 
         // 1. Edge-based relations
-        let node_map: HashMap<&str, &CanvasNode> =
+        let _node_map: HashMap<&str, &CanvasNode> =
             nodes.iter().map(|n| (n.id.as_str(), n)).collect();
 
         for edge in edges {
@@ -389,7 +389,7 @@ impl CanvasContextBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::canvas::{CanvasNodeRefs, CanvasSize};
+    use crate::domain::canvas::{CanvasNodeRefs, CanvasPosition, CanvasSize};
     use std::collections::HashMap;
 
     fn make_node(id: &str, kind: CanvasNodeKind, x: f64, y: f64) -> CanvasNode {

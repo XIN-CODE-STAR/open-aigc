@@ -2,10 +2,7 @@
 use rusqlite::{params, OptionalExtension};
 use uuid::Uuid;
 
-use crate::domain::creative_state::{
-    CharacterAsset, CreativeStateDraft, CreativeStateRecord, DecisionRecord, ReferenceAsset,
-    SceneAsset, StyleTokens,
-};
+use crate::domain::creative_state::{CreativeStateDraft, CreativeStateRecord};
 use crate::ports::{
     creative_state_repository::{CreativeStateRepository, CreativeStateRepositoryError},
     persistence::PersistenceError,

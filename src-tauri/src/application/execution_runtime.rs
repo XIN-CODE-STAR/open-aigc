@@ -10,6 +10,7 @@ use crate::domain::execution::{
 };
 
 /// 步骤执行结果（Executor → Runtime 的通信协议）。
+#[allow(clippy::large_enum_variant)] // Success 含完整 Artifact，失败/跳过路径无性能影响
 #[derive(Debug, Clone)]
 pub enum StepOutcome {
     /// 步骤成功，产生一个资产。

@@ -9,7 +9,7 @@
 //! - 整合 StyleTokens、CharacterProfile 等创意状态
 //! - 输出 CompiledPrompt 包含使用的上下文节点信息
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::application::canvas_context_service::CanvasContextService;
 use crate::application::error::AppError;

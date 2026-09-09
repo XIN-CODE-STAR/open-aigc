@@ -5,8 +5,8 @@ use crate::{
     ports::{
         agent_repository::AgentRepositoryError, asset_repository::AssetRepositoryError,
         backup_repository::BackupRepositoryError, credential_repository::CredentialRepositoryError,
-        edit_repository::EditRepositoryError, generation_repository::GenerationRepositoryError,
-        resource_repository::ResourceRepositoryError, review_repository::ReviewRepositoryError,
+        generation_repository::GenerationRepositoryError,
+        resource_repository::ResourceRepositoryError,
     },
 };
 

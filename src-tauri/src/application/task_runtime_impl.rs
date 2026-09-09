@@ -9,7 +9,6 @@
 //! 但抽离为可复用的 TaskRuntime。
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::application::model_router_service::ModelRouterService;

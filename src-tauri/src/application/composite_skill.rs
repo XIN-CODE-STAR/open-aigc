@@ -310,8 +310,8 @@ mod tests {
         // 环境依赖测试：可能通过也可能失败
         let result = super::detect_ffmpeg();
         // 不做断言，只确保不 panic
-        if result.is_some() {
-            assert_eq!(result.unwrap(), "ffmpeg");
+        if let Some(path) = result {
+            assert_eq!(path, "ffmpeg");
         }
     }
 }

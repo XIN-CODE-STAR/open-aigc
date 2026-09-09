@@ -9,12 +9,9 @@
 use std::sync::Mutex;
 
 use crate::application::error::AppError;
-use crate::domain::agents::{
-    AgentType, RequirementOutput, StoryOutput, VisualSpecOutput, WorkflowPhase,
-};
+use crate::domain::agents::{RequirementOutput, VisualSpecOutput};
 use crate::domain::platform::{
-    CreativeRunRecord, ProjectDraft, ProjectRecord, ProjectStatus, ProjectType,
-    RequirementSpecRecord, RunStatus, StepStatus, VisualSpecRecord, WorkflowStage,
+    CreativeRunRecord, ProjectRecord, ProjectStatus, ProjectType, RunStatus, WorkflowStage,
 };
 
 /// 平台服务配置。

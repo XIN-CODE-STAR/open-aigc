@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use crate::{
-    adapters::sqlite::creative_state_repository::SqliteCreativeStateRepository,
     application::error::AppError,
     domain::creative_state::{
         CharacterAsset, CreativeStateDraft, CreativeStateRecord, DecisionRecord, ReferenceAsset,

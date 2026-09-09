@@ -115,7 +115,7 @@ impl CriticService {
     pub fn save_dimensions(
         &self,
         report_id: &str,
-        reviewer_provider: Option<&str>,
+        _reviewer_provider: Option<&str>,
     ) -> Result<Vec<ReviewDimensionRecord>, AppError> {
         let report = self
             .get_report(report_id)?

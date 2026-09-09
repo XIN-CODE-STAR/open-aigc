@@ -90,7 +90,7 @@ impl MangaService {
     pub fn bind_to_classroom(
         &self,
         project_id: &str,
-        classroom_id: Option<&str>,
+        _classroom_id: Option<&str>,
     ) -> Result<MangaProjectRecord, AppError> {
         let mut repo = self
             .repository
@@ -243,6 +243,7 @@ impl MangaService {
 
     // ── Shot ──
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_shot(
         &self,
         scene_id: String,

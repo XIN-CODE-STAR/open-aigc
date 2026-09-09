@@ -137,7 +137,7 @@ mod tests {
             cache.get("你 好 ～", None),
             Some("你好呀，有什么可以帮你？".to_owned())
         );
-        assert_eq!(cache.get("你好", None).is_some(), true);
+        assert!(cache.get("你好", None).is_some());
     }
 
     #[test]
@@ -157,7 +157,7 @@ mod tests {
             cache.get("你好", Some("你是猫咪专家")),
             Some("喵～".to_owned())
         );
-        assert_eq!(cache.get("你好", Some("另一个 人设")).is_none(), true);
+        assert!(cache.get("你好", Some("另一个 人设")).is_none());
     }
 
     #[test]

@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use crate::application::canvas_context_builder::CanvasContextBuilder;
 use crate::application::error::AppError;
 use crate::domain::canvas::{
-    CanvasContext, CanvasNode, ContextBudget, ContextQuery, ContextualNode, PromptContext,
+    CanvasContext, CanvasNode, ContextBudget, ContextQuery, PromptContext,
 };
 use crate::ports::canvas_repository::CanvasRepository;
 

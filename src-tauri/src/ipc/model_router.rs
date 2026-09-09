@@ -61,8 +61,7 @@ pub fn model_router_v1_list_models(
 ) -> Result<serde_json::Value, IpcError> {
     let task_type = request["taskType"]
         .as_str()
-        .map(|s| RoutingTaskType::parse(s).ok())
-        .flatten();
+        .and_then(|s| RoutingTaskType::parse(s).ok());
 
     let models = service.list_available_models(task_type)?;
     serde_json::to_value(models).map_err(|e| {

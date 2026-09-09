@@ -146,6 +146,7 @@ impl GenerationPipeline {
     /// - `app`: 可选 AppHandle，用于向前端推送阶段事件
     ///
     /// 返回 PipelineOutput，包含资产 ID、版本 ID、评价报告 ID 等。
+    #[allow(clippy::too_many_arguments)]
     pub fn complete_attempt(
         &self,
         provider: &dyn UnifiedProviderAdapter,

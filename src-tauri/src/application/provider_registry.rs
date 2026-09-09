@@ -26,6 +26,7 @@ pub struct ResolvedProvider {
 /// Provider 注册表。
 pub struct ProviderRegistry {
     /// provider_id → (adapter, credential_key)
+    #[allow(clippy::type_complexity)]
     adapters: RwLock<HashMap<String, (Arc<dyn UnifiedProviderAdapter>, Option<String>)>>,
     /// 凭据解析器（Phase A 注入，setup 阶段设置一次）。
     credential_manager: OnceLock<Arc<CredentialManager>>,

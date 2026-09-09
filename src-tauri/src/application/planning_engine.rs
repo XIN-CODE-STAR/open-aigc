@@ -26,6 +26,7 @@ use crate::{
 use super::agent_service::AgentEvent;
 
 /// 规划阶段产物：正常计划，或简单对话的直接回答。
+#[allow(clippy::large_enum_variant)] // Planned 含完整 PlanRecord，DirectAnswer 路径无性能影响
 pub(crate) enum PlanningOutcome {
     /// 生成了执行计划（通用规划或创作快速路径）。
     Planned {
@@ -154,6 +155,7 @@ impl PlanningEngine {
     ///
     /// 返回 `PlanningOutcome`：正常计划（`Planned`，创作快速路径时附带
     /// CreativePlan），或简单对话的直接回答（`DirectAnswer`）。
+    #[allow(clippy::too_many_arguments)]
     pub fn run_planning_phase(
         &self,
         app: &tauri::AppHandle,

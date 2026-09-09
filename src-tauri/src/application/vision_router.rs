@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use crate::ports::parser_port::{ParseError, ParseRequest, ParseResult, ParserPort};
 use crate::ports::vision_reasoning_port::{
-    VisionReasonerInfo, VisionReasoningError, VisionReasoningPort, VisionReasoningRequest,
-    VisionReasoningResult,
+    VisionReasoningError, VisionReasoningPort, VisionReasoningRequest, VisionReasoningResult,
 };
 
 /// Vision task complexity levels.

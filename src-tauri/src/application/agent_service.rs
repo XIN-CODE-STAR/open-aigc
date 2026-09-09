@@ -264,6 +264,7 @@ fn is_creative_task(message: &str, has_image: bool) -> bool {
 }
 
 /// 规划阶段产物：正常计划，或简单对话的直接回答。
+#[allow(clippy::large_enum_variant)] // Planned 含两个较大记录，出现频率低，无需装箱
 enum PlanningOutcome {
     /// 生成了执行计划（通用规划或创作快速路径）。
     Planned {
@@ -742,6 +743,7 @@ impl AgentService {
     ///
     /// 返回 `PlanningOutcome`：正常计划（`Planned`，创作快速路径时附带
     /// CreativePlan），或简单对话的直接回答（`DirectAnswer`）。
+    #[allow(clippy::too_many_arguments)] // 规划上下文参数随会话状态自然增长，暂不打包
     fn run_planning_phase(
         &self,
         app: &AppHandle,
@@ -972,6 +974,7 @@ impl AgentService {
     }
 
     /// 执行阶段：逐步执行计划中的每个步骤。
+    #[allow(clippy::too_many_arguments)] // 执行上下文参数随会话状态自然增长，暂不打包
     fn run_execution_phase(
         &self,
         app: &AppHandle,
@@ -1114,6 +1117,7 @@ impl AgentService {
     }
 
     /// 执行单个计划步骤的工具循环。
+    #[allow(clippy::too_many_arguments)] // 循环状态以可变引用传入，避免额外的状态结构体
     fn execute_single_step(
         &self,
         app: &AppHandle,
@@ -1878,7 +1882,7 @@ fn strip_base64_images(content: &str) -> String {
             let abs_data_start = start + data_start + 7; // "base64,".len() = 7
                                                          // 找到结束引号、逗号或换行
             let abs_end = remaining[abs_data_start..]
-                .find(|c: char| c == '"' || c == '\'' || c == ',' || c == '\n' || c == '}')
+                .find(['"', '\'', ',', '\n', '}'])
                 .map(|p| abs_data_start + p)
                 .unwrap_or(remaining.len());
             let before = &remaining[..start];
@@ -2115,7 +2119,7 @@ impl Reloadable for AgentService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::agent::{ChatMessage, MessageRole, PlanStepStatus, ToolCall};
+    use crate::domain::agent::{MessageRole, PlanStepStatus, ToolCall};
 
     #[test]
     fn build_planning_prompt_includes_user_system() {

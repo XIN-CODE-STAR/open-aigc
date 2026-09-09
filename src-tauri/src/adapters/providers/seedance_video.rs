@@ -408,10 +408,7 @@ fn classify_seedance_error(error: ureq::Error) -> ProviderError {
     match error {
         ureq::Error::Status(status, response) => {
             let body = response.into_string().unwrap_or_default();
-            ProviderError::Remote {
-                status: status as u16,
-                body,
-            }
+            ProviderError::Remote { status, body }
         }
         _ => ProviderError::Network(message),
     }

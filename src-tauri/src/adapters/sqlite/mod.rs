@@ -30,10 +30,8 @@ pub mod workspace_repository;
 
 pub use agent_repository::SqliteAgentRepository;
 pub use analysis_repository::SqliteAnalysisJobRepository;
-pub use edit_repository::SqliteEditRepository;
 pub use manga_repository::SqliteMangaRepository;
 pub use plan_repository::SqlitePlanRepository;
-pub use review_repository::SqliteReviewRepository;
 
 /// 生成当前 UTC 时间的 RFC3339 字符串，供 SQLite 仓库写入 created_at/updated_at。
 pub fn now_rfc3339() -> Result<String, PersistenceError> {

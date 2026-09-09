@@ -207,36 +207,33 @@ impl CreativePollWorker {
                     PollOutcome::StillRunning { progress } => {
                         eprintln!(
                             "[PollWorker] {} still running ({progress}%)",
-                            &submission.submission_id
+                            submission.submission_id
                         );
                     }
                     PollOutcome::Completed { result_url } => {
                         eprintln!(
                             "[PollWorker] {} completed, downloading...",
-                            &submission.submission_id
+                            submission.submission_id
                         );
                         match self.download(&submission.provider_id, &result_url) {
                             Ok(file) => {
                                 eprintln!(
                                     "[PollWorker] {} downloaded: {}",
-                                    &submission.submission_id, file.file_path
+                                    submission.submission_id, file.file_path
                                 );
                                 states[i] = Some(PollState::Downloaded(file));
                             }
                             Err(reason) => {
                                 eprintln!(
                                     "[PollWorker] {} download failed: {reason}",
-                                    &submission.submission_id
+                                    submission.submission_id
                                 );
                                 states[i] = Some(PollState::DownloadFailed(reason));
                             }
                         }
                     }
                     PollOutcome::Failed { reason, .. } => {
-                        eprintln!(
-                            "[PollWorker] {} failed: {reason}",
-                            &submission.submission_id
-                        );
+                        eprintln!("[PollWorker] {} failed: {reason}", submission.submission_id);
                         states[i] = Some(PollState::GenerationFailed(reason));
                     }
                 }
@@ -264,7 +261,7 @@ impl CreativePollWorker {
         // 组装结果
         pending
             .into_iter()
-            .zip(states.into_iter())
+            .zip(states)
             .map(|(submission, state)| match state {
                 Some(PollState::Downloaded(file)) => SubmissionResult::Success { submission, file },
                 Some(PollState::GenerationFailed(reason)) => {

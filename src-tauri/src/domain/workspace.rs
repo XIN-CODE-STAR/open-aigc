@@ -73,6 +73,7 @@ pub struct WorkspaceStatus {
 /// 重命名工作空间时的内部返回类型：
 /// - `Updated`：更新成功，返回最新 profile。
 /// - `NotInitialized`：当前未初始化（无 singleton 行）。
+///
 /// 之所以不直接用 `PersistenceError::NotFound`，是因为 AppError 暂未提供
 /// 通用 NotFound 变体；本枚举与 `initialize` 的 `AlreadyInitialized` 行为一致。
 #[derive(Debug, Clone, PartialEq, Eq)]

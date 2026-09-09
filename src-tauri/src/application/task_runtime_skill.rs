@@ -87,7 +87,7 @@ impl ExecutionSkill for TaskRuntimeSkill {
         _runtime: &crate::application::execution_runtime::ExecutionRuntime,
     ) -> Result<Artifact, String> {
         let request = TaskRequest {
-            kind: self.task_kind.clone(),
+            kind: self.task_kind,
             prompt: step_description.to_owned(),
             priority: crate::domain::task::TaskPriority::Normal,
             workspace_id: String::new(), // 由调用方填充

@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Manager};
 
 use crate::{
-    application::{error::AppError, memory_canvas_service::MemoryCanvasService},
+    application::memory_canvas_service::MemoryCanvasService,
     ports::memory_canvas_repository::{MemoryCanvas, MemoryEdge, MemoryNode, MemoryViewport},
 };
 
