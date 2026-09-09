@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-creative-memory-v1-confirm"
+description = "Enables the creative_memory_v1_confirm command without any pre-configured scope."
+commands.allow = ["creative_memory_v1_confirm"]
+
+[[permission]]
+identifier = "deny-creative-memory-v1-confirm"
+description = "Denies the creative_memory_v1_confirm command without any pre-configured scope."
+commands.deny = ["creative_memory_v1_confirm"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-creative-state-v1-update-style"
+description = "Enables the creative_state_v1_update_style command without any pre-configured scope."
+commands.allow = ["creative_state_v1_update_style"]
+
+[[permission]]
+identifier = "deny-creative-state-v1-update-style"
+description = "Denies the creative_state_v1_update_style command without any pre-configured scope."
+commands.deny = ["creative_state_v1_update_style"]

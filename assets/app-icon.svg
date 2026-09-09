@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">AIGC Studio</title>
+  <rect width="512" height="512" rx="104" fill="#0F6CBD" />
+  <path
+    fill="#FFFFFF"
+    fill-rule="evenodd"
+    d="M256 92 120 404h72l24-60h80l24 60h72L256 92Zm0 148-20 50h40l-20-50Z"
+  />
+  <rect x="356" y="108" width="48" height="48" rx="12" fill="#F7B955" />
+</svg>

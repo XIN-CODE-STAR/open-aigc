@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-generation-v1-get-task"
+description = "Enables the generation_v1_get_task command without any pre-configured scope."
+commands.allow = ["generation_v1_get_task"]
+
+[[permission]]
+identifier = "deny-generation-v1-get-task"
+description = "Denies the generation_v1_get_task command without any pre-configured scope."
+commands.deny = ["generation_v1_get_task"]

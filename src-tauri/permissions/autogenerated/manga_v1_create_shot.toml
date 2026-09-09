@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-manga-v1-create-shot"
+description = "Enables the manga_v1_create_shot command without any pre-configured scope."
+commands.allow = ["manga_v1_create_shot"]
+
+[[permission]]
+identifier = "deny-manga-v1-create-shot"
+description = "Denies the manga_v1_create_shot command without any pre-configured scope."
+commands.deny = ["manga_v1_create_shot"]

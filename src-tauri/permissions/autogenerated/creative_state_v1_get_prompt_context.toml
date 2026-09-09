@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-creative-state-v1-get-prompt-context"
+description = "Enables the creative_state_v1_get_prompt_context command without any pre-configured scope."
+commands.allow = ["creative_state_v1_get_prompt_context"]
+
+[[permission]]
+identifier = "deny-creative-state-v1-get-prompt-context"
+description = "Denies the creative_state_v1_get_prompt_context command without any pre-configured scope."
+commands.deny = ["creative_state_v1_get_prompt_context"]

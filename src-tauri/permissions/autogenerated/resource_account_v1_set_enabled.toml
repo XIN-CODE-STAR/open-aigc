@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-resource-account-v1-set-enabled"
+description = "Enables the resource_account_v1_set_enabled command without any pre-configured scope."
+commands.allow = ["resource_account_v1_set_enabled"]
+
+[[permission]]
+identifier = "deny-resource-account-v1-set-enabled"
+description = "Denies the resource_account_v1_set_enabled command without any pre-configured scope."
+commands.deny = ["resource_account_v1_set_enabled"]

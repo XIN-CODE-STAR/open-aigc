@@ -1,0 +1,9 @@
+pub mod dashscope_captioner;
+pub mod florence_captioner;
+pub mod grok_chat;
+pub mod grok_generation;
+pub mod grok_unified;
+pub mod kling_video;
+pub mod openai_compatible;
+pub mod seedance_video;
+pub mod vision_adapter;

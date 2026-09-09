@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-creative-state-v1-get"
+description = "Enables the creative_state_v1_get command without any pre-configured scope."
+commands.allow = ["creative_state_v1_get"]
+
+[[permission]]
+identifier = "deny-creative-state-v1-get"
+description = "Denies the creative_state_v1_get command without any pre-configured scope."
+commands.deny = ["creative_state_v1_get"]

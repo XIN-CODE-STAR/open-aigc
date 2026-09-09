@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-asset-v1-import"
+description = "Enables the asset_v1_import command without any pre-configured scope."
+commands.allow = ["asset_v1_import"]
+
+[[permission]]
+identifier = "deny-asset-v1-import"
+description = "Denies the asset_v1_import command without any pre-configured scope."
+commands.deny = ["asset_v1_import"]

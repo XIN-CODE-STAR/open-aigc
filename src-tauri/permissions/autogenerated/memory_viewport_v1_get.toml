@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-viewport-v1-get"
+description = "Enables the memory_viewport_v1_get command without any pre-configured scope."
+commands.allow = ["memory_viewport_v1_get"]
+
+[[permission]]
+identifier = "deny-memory-viewport-v1-get"
+description = "Denies the memory_viewport_v1_get command without any pre-configured scope."
+commands.deny = ["memory_viewport_v1_get"]

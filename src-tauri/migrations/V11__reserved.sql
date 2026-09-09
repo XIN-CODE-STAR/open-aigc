@@ -1,0 +1,3 @@
+-- V11: Placeholder migration (reserved for future use)
+-- This migration exists to maintain contiguous version numbering.
+-- V10 created agent_plans, V12 adds everos_config.

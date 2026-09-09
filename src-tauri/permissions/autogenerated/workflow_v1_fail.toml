@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-workflow-v1-fail"
+description = "Enables the workflow_v1_fail command without any pre-configured scope."
+commands.allow = ["workflow_v1_fail"]
+
+[[permission]]
+identifier = "deny-workflow-v1-fail"
+description = "Denies the workflow_v1_fail command without any pre-configured scope."
+commands.deny = ["workflow_v1_fail"]

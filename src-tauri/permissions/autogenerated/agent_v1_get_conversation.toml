@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-v1-get-conversation"
+description = "Enables the agent_v1_get_conversation command without any pre-configured scope."
+commands.allow = ["agent_v1_get_conversation"]
+
+[[permission]]
+identifier = "deny-agent-v1-get-conversation"
+description = "Denies the agent_v1_get_conversation command without any pre-configured scope."
+commands.deny = ["agent_v1_get_conversation"]

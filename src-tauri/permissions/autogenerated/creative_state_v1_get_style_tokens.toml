@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-creative-state-v1-get-style-tokens"
+description = "Enables the creative_state_v1_get_style_tokens command without any pre-configured scope."
+commands.allow = ["creative_state_v1_get_style_tokens"]
+
+[[permission]]
+identifier = "deny-creative-state-v1-get-style-tokens"
+description = "Denies the creative_state_v1_get_style_tokens command without any pre-configured scope."
+commands.deny = ["creative_state_v1_get_style_tokens"]

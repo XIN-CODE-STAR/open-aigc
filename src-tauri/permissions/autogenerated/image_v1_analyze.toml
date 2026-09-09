@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-image-v1-analyze"
+description = "Enables the image_v1_analyze command without any pre-configured scope."
+commands.allow = ["image_v1_analyze"]
+
+[[permission]]
+identifier = "deny-image-v1-analyze"
+description = "Denies the image_v1_analyze command without any pre-configured scope."
+commands.deny = ["image_v1_analyze"]

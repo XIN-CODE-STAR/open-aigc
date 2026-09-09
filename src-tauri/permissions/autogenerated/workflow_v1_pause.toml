@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-workflow-v1-pause"
+description = "Enables the workflow_v1_pause command without any pre-configured scope."
+commands.allow = ["workflow_v1_pause"]
+
+[[permission]]
+identifier = "deny-workflow-v1-pause"
+description = "Denies the workflow_v1_pause command without any pre-configured scope."
+commands.deny = ["workflow_v1_pause"]

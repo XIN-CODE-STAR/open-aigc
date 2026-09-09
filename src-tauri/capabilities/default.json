@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions required by the host: native file open dialog for asset import and controlled opener for managed assets.",
+  "windows": ["main"],
+  "permissions": [
+    "dialog:allow-open",
+    "opener:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:event:allow-emit",
+    "core:event:allow-emit-to",
+    "default"
+  ]
+}

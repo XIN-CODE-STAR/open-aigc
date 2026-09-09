@@ -1,0 +1,110 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+out/
+.output/
+.vite/
+/work/
+
+# Tauri and Rust
+target/
+src-tauri/target/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test and coverage
+coverage/
+test-results/
+playwright-report/
+
+# Local app data
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# IDE / AI 助手本地数据
+.trae/
+.claude/
+.serial_mcp/
+.cursor/
+
+# 本地调试与临时产物
+.commit-msg-*.txt
+clippy-output.txt
+clippy_output.txt
+cargo_warnings.txt
+payload.json.bak
+check_port.ps1
+check_proc.ps1
+kill_dev.ps1
+read_log*.ps1
+start_dev.ps1
+scripts/_patch_*.py
+scripts/_fix_indent.py
+students-template.xlsx
+scripts/generate-students-xlsx.mjs
+*_REPORT.md
+
+# 旧 git 历史本地备份（发布时已重建干净历史）
+.git-history-backup/
+
+# 内部规划文档（不随公共仓库发布）
+docs/product/
+docs/progress/
+docs/research/
+docs/architecture/
+docs/database/
+docs/design-system/
+docs/ai/
+docs/roadmap/
+docs/sdk/
+docs/2026-*.md
+docs/adr-*.md
+docs/agent-memory-system.md
+docs/architecture-audit.md
+docs/canvas-*.md
+docs/project-architecture.md
+docs/scaffolding-plan.md
+docs/phase-0-review.md
+docs/release-readiness-v0.2.md
+docs/data-flow.md
+docs/folder-structure.md
+docs/build-and-release.md
+docs/github-issues.json
+docs/github-roadmap.md
+
+# 本地代理服务的运行时与依赖产物（源码保留）
+services/*/node_modules/
+services/*/dist/
+services/*/logs/
+services/*/.git-upstream-remote/
+

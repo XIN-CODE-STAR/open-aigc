@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-edit-v1-get-request"
+description = "Enables the edit_v1_get_request command without any pre-configured scope."
+commands.allow = ["edit_v1_get_request"]
+
+[[permission]]
+identifier = "deny-edit-v1-get-request"
+description = "Denies the edit_v1_get_request command without any pre-configured scope."
+commands.deny = ["edit_v1_get_request"]

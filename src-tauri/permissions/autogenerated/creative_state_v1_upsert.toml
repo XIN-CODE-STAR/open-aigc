@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-creative-state-v1-upsert"
+description = "Enables the creative_state_v1_upsert command without any pre-configured scope."
+commands.allow = ["creative_state_v1_upsert"]
+
+[[permission]]
+identifier = "deny-creative-state-v1-upsert"
+description = "Denies the creative_state_v1_upsert command without any pre-configured scope."
+commands.deny = ["creative_state_v1_upsert"]

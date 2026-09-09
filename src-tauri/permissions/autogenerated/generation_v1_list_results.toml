@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-generation-v1-list-results"
+description = "Enables the generation_v1_list_results command without any pre-configured scope."
+commands.allow = ["generation_v1_list_results"]
+
+[[permission]]
+identifier = "deny-generation-v1-list-results"
+description = "Denies the generation_v1_list_results command without any pre-configured scope."
+commands.deny = ["generation_v1_list_results"]

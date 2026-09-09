@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-edge-v1-delete"
+description = "Enables the memory_edge_v1_delete command without any pre-configured scope."
+commands.allow = ["memory_edge_v1_delete"]
+
+[[permission]]
+identifier = "deny-memory-edge-v1-delete"
+description = "Denies the memory_edge_v1_delete command without any pre-configured scope."
+commands.deny = ["memory_edge_v1_delete"]

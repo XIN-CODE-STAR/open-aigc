@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-v1-set-output-directory"
+description = "Enables the agent_v1_set_output_directory command without any pre-configured scope."
+commands.allow = ["agent_v1_set_output_directory"]
+
+[[permission]]
+identifier = "deny-agent-v1-set-output-directory"
+description = "Denies the agent_v1_set_output_directory command without any pre-configured scope."
+commands.deny = ["agent_v1_set_output_directory"]

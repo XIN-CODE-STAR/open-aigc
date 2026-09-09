@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-creative-state-v1-add-scene"
+description = "Enables the creative_state_v1_add_scene command without any pre-configured scope."
+commands.allow = ["creative_state_v1_add_scene"]
+
+[[permission]]
+identifier = "deny-creative-state-v1-add-scene"
+description = "Denies the creative_state_v1_add_scene command without any pre-configured scope."
+commands.deny = ["creative_state_v1_add_scene"]

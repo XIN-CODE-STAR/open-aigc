@@ -1,0 +1,51 @@
+name: 缺陷报告
+description: 报告可重复的缺陷或回归。
+title: "fix: "
+labels:
+  - "type:bug"
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题摘要
+      description: 发生了什么？影响了哪个用户旅程？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重现步骤
+      description: 提供最小且准确的操作步骤，删除敏感数据。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为与错误
+      description: 可提供脱敏错误、截图或诊断引用，不粘贴凭据。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      description: Windows 版本、应用版本、工作空间版本和相关 Provider/Plugin 版本。
+    validations:
+      required: false
+  - type: dropdown
+    id: data_risk
+    attributes:
+      label: 数据风险
+      options:
+        - 无数据丢失或安全风险
+        - 可能影响未保存操作
+        - 可能影响工作空间、文件或迁移
+        - 可能涉及凭据、隐私或越权
+    validations:
+      required: true

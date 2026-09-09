@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-workflow-v1-mark-plan-created"
+description = "Enables the workflow_v1_mark_plan_created command without any pre-configured scope."
+commands.allow = ["workflow_v1_mark_plan_created"]
+
+[[permission]]
+identifier = "deny-workflow-v1-mark-plan-created"
+description = "Denies the workflow_v1_mark_plan_created command without any pre-configured scope."
+commands.deny = ["workflow_v1_mark_plan_created"]

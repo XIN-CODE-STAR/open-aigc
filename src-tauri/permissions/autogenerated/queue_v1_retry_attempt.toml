@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-queue-v1-retry-attempt"
+description = "Enables the queue_v1_retry_attempt command without any pre-configured scope."
+commands.allow = ["queue_v1_retry_attempt"]
+
+[[permission]]
+identifier = "deny-queue-v1-retry-attempt"
+description = "Denies the queue_v1_retry_attempt command without any pre-configured scope."
+commands.deny = ["queue_v1_retry_attempt"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-backup-v1-preview-restore"
+description = "Enables the backup_v1_preview_restore command without any pre-configured scope."
+commands.allow = ["backup_v1_preview_restore"]
+
+[[permission]]
+identifier = "deny-backup-v1-preview-restore"
+description = "Denies the backup_v1_preview_restore command without any pre-configured scope."
+commands.deny = ["backup_v1_preview_restore"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-creative-memory-v1-list-events"
+description = "Enables the creative_memory_v1_list_events command without any pre-configured scope."
+commands.allow = ["creative_memory_v1_list_events"]
+
+[[permission]]
+identifier = "deny-creative-memory-v1-list-events"
+description = "Denies the creative_memory_v1_list_events command without any pre-configured scope."
+commands.deny = ["creative_memory_v1_list_events"]

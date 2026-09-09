@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-generation-v1-record-output"
+description = "Enables the generation_v1_record_output command without any pre-configured scope."
+commands.allow = ["generation_v1_record_output"]
+
+[[permission]]
+identifier = "deny-generation-v1-record-output"
+description = "Denies the generation_v1_record_output command without any pre-configured scope."
+commands.deny = ["generation_v1_record_output"]

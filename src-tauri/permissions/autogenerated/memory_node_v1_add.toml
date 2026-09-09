@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-node-v1-add"
+description = "Enables the memory_node_v1_add command without any pre-configured scope."
+commands.allow = ["memory_node_v1_add"]
+
+[[permission]]
+identifier = "deny-memory-node-v1-add"
+description = "Denies the memory_node_v1_add command without any pre-configured scope."
+commands.deny = ["memory_node_v1_add"]

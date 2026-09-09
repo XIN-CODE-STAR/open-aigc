@@ -1,0 +1,41 @@
+name: 工程任务
+description: 跟踪实现、重构、测试、文档或基础设施工作。
+title: "chore: "
+labels:
+  - "type:task"
+body:
+  - type: textarea
+    id: purpose
+    attributes:
+      label: 目的
+      description: 需要解决什么工程问题，为什么现在做？
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围与非目标
+      description: 具体工作和明确不处理的内容。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完成标准
+      description: 列出可验证标准和实际测试要求。
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: 依赖与风险
+      description: 设计文档、ADR、迁移、安全、兼容或外部依赖。
+    validations:
+      required: false
+  - type: checkboxes
+    id: phase_gate
+    attributes:
+      label: 阶段门槛
+      options:
+        - label: 若属于实现工作，Phase 0 已被明确接受。
+          required: true

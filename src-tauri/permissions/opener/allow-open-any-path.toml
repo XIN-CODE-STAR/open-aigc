@@ -1,0 +1,9 @@
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[[permission]]
+identifier = "allow-open-any-path"
+description = "Allow opening any local file path with the system default application."
+commands.allow = ["open_path"]
+
+[[permission.scope.allow]]
+path = "**"

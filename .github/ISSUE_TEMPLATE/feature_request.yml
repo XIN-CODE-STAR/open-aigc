@@ -1,0 +1,57 @@
+name: 功能建议
+description: 提议一个明确解决用户问题的产品能力。
+title: "feat: "
+labels:
+  - "type:feature"
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户问题
+      description: 哪个角色在什么旅程中遇到什么问题？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望结果
+      description: 描述可观察行为，不直接指定未经评审的技术实现。
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围与非目标
+      description: 包含什么，明确不包含什么？
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 架构影响
+      description: 数据、事件、权限、离线、Provider、Plugin、迁移和发布影响。
+    validations:
+      required: false
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Milestone
+      options:
+        - M1 Foundation
+        - M2 UI
+        - M3 Classroom
+        - M4 Student
+        - M5 AI Providers
+        - M6 Prompt Center
+        - M7 Resource Center
+        - M8 Release
+        - v1.5/v2.0 Future
+    validations:
+      required: true
+  - type: checkboxes
+    id: phase_gate
+    attributes:
+      label: 阶段门槛
+      options:
+        - label: 若属于实现工作，Phase 0 已被明确接受。
+          required: true

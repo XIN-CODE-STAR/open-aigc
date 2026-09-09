@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-edit-v1-list-requests"
+description = "Enables the edit_v1_list_requests command without any pre-configured scope."
+commands.allow = ["edit_v1_list_requests"]
+
+[[permission]]
+identifier = "deny-edit-v1-list-requests"
+description = "Denies the edit_v1_list_requests command without any pre-configured scope."
+commands.deny = ["edit_v1_list_requests"]

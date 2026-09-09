@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-model-router-v1-list-models"
+description = "Enables the model_router_v1_list_models command without any pre-configured scope."
+commands.allow = ["model_router_v1_list_models"]
+
+[[permission]]
+identifier = "deny-model-router-v1-list-models"
+description = "Denies the model_router_v1_list_models command without any pre-configured scope."
+commands.deny = ["model_router_v1_list_models"]
