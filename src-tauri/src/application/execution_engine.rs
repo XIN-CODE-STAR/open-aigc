@@ -118,6 +118,7 @@ impl ExecutionEngine {
                 step,
                 &current_plan.steps,
                 memory_context,
+                conversation.system_prompt.as_deref(),
             );
 
             // 执行当前步骤的工具循环。
@@ -569,16 +570,21 @@ impl ExecutionEngine {
             .lock()
             .ok()
             .and_then(|dir| dir.clone());
-        // 对话中最近一张用户上传的图片：存在时图片生成工具自动走图生图（i2i），
-        // 让结果贴合原图的版式与内容，而不是仅凭文字描述重画。
-        let latest_user_image = self
-            .with_agent_repository(|repo| {
-                repo.list_messages(conversation_id).map_err(AppError::from)
-            })?
+        // 对话历史一次性读出：最近一张用户图片（图生图参考）与用户当前消息
+        //（画布自动连线结合上下文判断关联）。
+        let recent_messages = self.with_agent_repository(|repo| {
+            repo.list_messages(conversation_id).map_err(AppError::from)
+        })?;
+        let recent_user_messages: Vec<_> = recent_messages
             .iter()
             .rev()
             .filter(|m| m.role == crate::domain::agent::MessageRole::User)
+            .collect();
+        // 让结果贴合原图的版式与内容，而不是仅凭文字描述重画。
+        let latest_user_image = recent_user_messages
+            .iter()
             .find_map(|m| latest_image_from_content(m.content.as_deref()?));
+        let current_user_message = recent_user_messages.first().and_then(|m| m.content.clone());
 
         let ctx = ToolContext {
             workspace_id: workspace_id.to_owned(),
@@ -587,6 +593,7 @@ impl ExecutionEngine {
             conversation_id: conversation_id.to_owned(),
             sandbox: self.sandbox.clone(),
             latest_user_image,
+            current_user_message,
         };
         eprintln!(
             "[AgentTool] execute start name={} conv={conversation_id}",
@@ -773,8 +780,11 @@ const EXECUTION_STATIC_PREFIX: &str =
     - 需要生成视频时，必须调用 video_generation 工具。\n\
     - 调用工具后根据返回结果继续推进。\n\
     - 不要替学生回答问题，也不要替学生确认（例如不要自己写「是的，请继续」）；需要学生决定时，必须调用 ask_user_question 工具并停止等待。\n\
-    - 严格执行当前步骤，不要扩大范围：用户没有要求的额外镜头、变体、系列内容一律不要生成。\n\
-    - 回复要简洁：调用工具时只需一句话说明你在做什么（如「正在为你生成图片」），不需要长篇解释。\n\
+    - 严格执行当前步骤，不要扩大范围：用户没有要求的额外镜头、变体、系列内容一律不要生成。\n\n\
+    回复长度硬性限制（必须遵守）：\n\
+    - 除工具调用本身外，每条回复只输出一句话（不超过 40 字），说明你在做什么或结果如何。\n\
+    - 任务完成后只报告结果本身（例如「图片已生成，见下方」），不要总结过程、不要逐条复述步骤、不要描述图片内容。\n\
+    - 禁止：开场客套（「好的！」「没问题！」）、结尾客套（「希望对你有帮助」）、复述用户请求、展望式表态（「接下来我还可以…」）、emoji、markdown 标题。\n\
     - 不要重复已经说过的内容，不要复述工具返回的原始数据。\n\
     - 用中文回复。\n\n\
     可用工具：\n\
@@ -802,6 +812,7 @@ fn build_execution_system_prompt(
     current_step: &PlanStep,
     all_steps: &[PlanStep],
     memory_context: Option<&str>,
+    user_system_prompt: Option<&str>,
 ) -> String {
     let steps_list: String = all_steps
         .iter()
@@ -831,6 +842,15 @@ fn build_execution_system_prompt(
             prompt.push_str("\n\n[相关记忆]\n");
             prompt.push_str(mem);
             prompt.push_str("\n请在执行时参考以上记忆，贴合学生偏好。");
+        }
+    }
+
+    // 注入会话级设定（用户自定义系统提示词 + 技能 + 项目记忆，
+    // 发送时已合并进 conversation.system_prompt）。
+    if let Some(custom) = user_system_prompt {
+        if !custom.trim().is_empty() {
+            prompt.push_str("\n\n[项目与技能设定]\n");
+            prompt.push_str(custom);
         }
     }
 

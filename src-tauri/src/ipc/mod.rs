@@ -13,6 +13,7 @@ pub mod manga;
 pub mod memory;
 pub mod memory_canvas;
 pub mod model_router;
+pub mod plugins;
 pub mod queue;
 pub mod resource_accounts;
 pub mod resources;

@@ -43,8 +43,8 @@ use ipc::agent::{
     agent_v1_analyze_asset, agent_v1_analyze_assets_batch, agent_v1_create_conversation,
     agent_v1_debug_log, agent_v1_delete_conversation, agent_v1_get_conversation,
     agent_v1_list_conversations, agent_v1_list_invocations, agent_v1_list_messages,
-    agent_v1_rename_conversation, agent_v1_search_assets_semantic, agent_v1_send_message,
-    agent_v1_set_output_directory,
+    agent_v1_read_project_memory, agent_v1_rename_conversation, agent_v1_search_assets_semantic,
+    agent_v1_send_message, agent_v1_set_output_directory,
 };
 use ipc::assets::{
     asset_v1_delete, asset_v1_get, asset_v1_import, asset_v1_list, asset_v1_open_containing_folder,
@@ -94,6 +94,11 @@ use ipc::memory_canvas::{
 };
 use ipc::model_router::{
     model_router_v1_list_models, model_router_v1_record_outcome, model_router_v1_route,
+};
+use ipc::plugins::{
+    mcp_v1_add, mcp_v1_list, mcp_v1_probe, mcp_v1_remove, mcp_v1_scan_local, mcp_v1_toggle,
+    mcp_v1_update, skill_v1_delete, skill_v1_download, skill_v1_get_body, skill_v1_import,
+    skill_v1_list, skill_v1_scan_local,
 };
 use ipc::queue::{
     queue_v1_cancel_attempt, queue_v1_get_attempt, queue_v1_list_active, queue_v1_list_attempts,
@@ -278,7 +283,8 @@ pub fn run() {
                     download_dir,
                     pipeline_review_repo,
                     pipeline_asset_repo,
-                ),
+                )
+                .with_database_path(database_path.clone()),
             );
 
             // AgentService 协调 Plan-and-Execute 循环：规划 + 工具调用 + 持久化。
@@ -871,6 +877,7 @@ pub fn run() {
             agent_v1_list_invocations,
             agent_v1_send_message,
             agent_v1_set_output_directory,
+            agent_v1_read_project_memory,
             agent_v1_debug_log,
             memory_v1_status,
             memory_v1_search,
@@ -933,6 +940,20 @@ pub fn run() {
             memory_edge_v1_delete,
             memory_edge_v1_list,
             memory_viewport_v1_save,
+            // Plugins（技能 + MCP）
+            skill_v1_list,
+            skill_v1_scan_local,
+            skill_v1_import,
+            skill_v1_download,
+            skill_v1_delete,
+            skill_v1_get_body,
+            mcp_v1_list,
+            mcp_v1_add,
+            mcp_v1_update,
+            mcp_v1_remove,
+            mcp_v1_toggle,
+            mcp_v1_scan_local,
+            mcp_v1_probe,
             memory_viewport_v1_get,
             // Canvas (new architecture)
             canvas_v1_create,

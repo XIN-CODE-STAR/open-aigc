@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod embedding_openai;
 pub mod everos;
 pub mod file_vault;
 pub mod image_parser;

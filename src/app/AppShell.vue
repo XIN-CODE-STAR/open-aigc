@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import {
-  Archive,
+  Puzzle,
   Bell,
   BookOpenText,
   Bot,
@@ -75,9 +75,9 @@ const primaryNavigationItems = computed(() => [
     icon: Bot,
   },
   {
-    path: "/backup",
-    label: "备份",
-    icon: Archive,
+    path: "/plugins",
+    label: "插件",
+    icon: Puzzle,
   },
 ]);
 
@@ -164,6 +164,12 @@ async function refreshSidebarConversations(): Promise<void> {
   try {
     sidebarConversations.value = await listConversations();
     sidebarHistoryPhase.value = "ready";
+    // 默认展开全部分组，避免侧栏只看到文件夹而看不到具体历史对话
+    const expanded: Record<string, boolean> = { ...expandedHistoryGroups.value };
+    for (const item of sidebarConversations.value) {
+      expanded[conversationGroupLabel(item)] = true;
+    }
+    expandedHistoryGroups.value = expanded;
   } catch (error) {
     sidebarConversations.value = [];
     sidebarHistoryPhase.value = "error";
@@ -307,6 +313,8 @@ function cancelRename(): void {
 onMounted(() => {
   window.addEventListener(SIDEBAR_CONVERSATION_REFRESH_EVENT, handleConversationRefreshEvent);
   void workspace.ensureReady();
+  // 启动时恢复用户选定的工作目录，并同步到后端生成导出路径
+  projectDir.restore();
   void refreshSidebarConversations();
 });
 

@@ -38,6 +38,14 @@ const TOOL_ANALYZE_IMAGE: &str = "analyze_image";
 const TOOL_CANVAS_SEARCH: &str = "canvas_search";
 const TOOL_CANVAS_ADD_NOTE: &str = "canvas_add_note";
 const TOOL_CANVAS_CONNECT: &str = "canvas_connect";
+const TOOL_CANVAS_ADD_IMAGE: &str = "canvas_add_image";
+const TOOL_CANVAS_UPDATE_NODE: &str = "canvas_update_node";
+const TOOL_CANVAS_AUTO_LAYOUT: &str = "canvas_auto_layout";
+const TOOL_CANVAS_EXPORT: &str = "canvas_export";
+const TOOL_LIST_SKILLS: &str = "list_skills";
+const TOOL_USE_SKILL: &str = "use_skill";
+const TOOL_MCP_LIST_TOOLS: &str = "mcp_list_tools";
+const TOOL_MCP_CALL: &str = "mcp_call";
 const TOOL_SEARCH_SIMILAR_ASSETS: &str = "search_similar_assets";
 const TOOL_INSPECT_ASSET: &str = "inspect_asset";
 const TOOL_REASON_ABOUT_ASSET: &str = "reason_about_asset";
@@ -390,6 +398,121 @@ impl AgentToolExecutor for BuiltinToolExecutor {
                     "required": ["assetId", "question"]
                 }),
             ),
+            ToolDefinition::function(
+                TOOL_CANVAS_ADD_IMAGE,
+                "在当前对话的画布（工作记忆）上创建一个图片节点。url 填可公开访问的图片地址（http/https 或 data URL）。                 创建后会自动与画布上语义相关的节点建立连线。需要把图片放到画布上供用户查看时调用。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "图片地址（http/https 或 data URL）"
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "图片说明（可选，会作为节点摘要展示）"
+                        },
+                        "x": { "type": "number", "description": "画布 x 坐标（可选，默认自动排列）" },
+                        "y": { "type": "number", "description": "画布 y 坐标（可选）" }
+                    },
+                    "required": ["url"]
+                }),
+            ),
+            ToolDefinition::function(
+                TOOL_CANVAS_UPDATE_NODE,
+                "更新画布上已有节点的内容（便签文本、节点颜色）。先用 canvas_search 检索得到 nodeId，再调用本工具修改。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "nodeId": {
+                            "type": "string",
+                            "description": "要更新的节点 ID（来自 canvas_search 的结果）"
+                        },
+                        "text": {
+                            "type": "string",
+                            "description": "新的节点文本（可选）"
+                        },
+                        "color": {
+                            "type": "string",
+                            "description": "节点颜色十六进制值（可选，如 #fbbf24）"
+                        }
+                    },
+                    "required": ["nodeId"]
+                }),
+            ),
+            ToolDefinition::function(
+                TOOL_CANVAS_AUTO_LAYOUT,
+                "自动整理当前对话的画布：按节点类型分组排列成整齐的网格。画布杂乱时调用。返回移动的节点数。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+            ),
+            ToolDefinition::function(
+                TOOL_CANVAS_EXPORT,
+                "导出当前对话画布的完整 JSON（全部节点、连线与内容，图片二进制省略）。                 需要整体分析画布内容、汇总用户想法或备份画布时调用。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+            ),
+            ToolDefinition::function(
+                TOOL_LIST_SKILLS,
+                "列出用户已安装的技能（含名称与用途说明）。用户要求使用某个技能、或任务看起来与某个技能描述相关时，先调用本工具查看可用技能。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+            ),
+            ToolDefinition::function(
+                TOOL_USE_SKILL,
+                "加载一个技能的完整指令并按其执行任务。先用 list_skills 查看可用技能，确定要用的技能后调用本工具获取指令正文。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "技能名称（list_skills 返回的 name）"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            ),
+            ToolDefinition::function(
+                TOOL_MCP_LIST_TOOLS,
+                "查看 MCP 服务器及其工具。不传 server 时列出所有已启用的 MCP 服务器；传 server 名时列出该服务器提供的工具清单。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "server": {
+                            "type": "string",
+                            "description": "MCP 服务器名称（可选，不填则列出所有服务器）"
+                        }
+                    }
+                }),
+            ),
+            ToolDefinition::function(
+                TOOL_MCP_CALL,
+                "调用 MCP 服务器提供的工具。先用 mcp_list_tools 查看可用工具，再调用本工具执行。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "server": {
+                            "type": "string",
+                            "description": "MCP 服务器名称"
+                        },
+                        "tool": {
+                            "type": "string",
+                            "description": "工具名称（mcp_list_tools 返回的 name）"
+                        },
+                        "arguments": {
+                            "type": "object",
+                            "description": "工具参数对象（按工具的入参说明构造，可选）"
+                        }
+                    },
+                    "required": ["server", "tool"]
+                }),
+            ),
         ]
     }
 
@@ -412,6 +535,14 @@ impl AgentToolExecutor for BuiltinToolExecutor {
             TOOL_CANVAS_SEARCH => execute_canvas_search(self, ctx, arguments),
             TOOL_CANVAS_ADD_NOTE => execute_canvas_add_note(self, ctx, arguments),
             TOOL_CANVAS_CONNECT => execute_canvas_connect(self, ctx, arguments),
+            TOOL_CANVAS_ADD_IMAGE => execute_canvas_add_image(self, ctx, arguments),
+            TOOL_CANVAS_UPDATE_NODE => execute_canvas_update_node(self, ctx, arguments),
+            TOOL_CANVAS_AUTO_LAYOUT => execute_canvas_auto_layout(self, ctx, arguments),
+            TOOL_CANVAS_EXPORT => execute_canvas_export(self, ctx, arguments),
+            TOOL_LIST_SKILLS => execute_list_skills(self, ctx, arguments),
+            TOOL_USE_SKILL => execute_use_skill(self, ctx, arguments),
+            TOOL_MCP_LIST_TOOLS => execute_mcp_list_tools(self, ctx, arguments),
+            TOOL_MCP_CALL => execute_mcp_call(self, ctx, arguments),
             TOOL_SEARCH_SIMILAR_ASSETS => execute_search_similar_assets(self, ctx, arguments),
             TOOL_INSPECT_ASSET => execute_inspect_asset(self, ctx, arguments),
             TOOL_REASON_ABOUT_ASSET => execute_reason_about_asset(self, ctx, arguments),
@@ -430,8 +561,21 @@ fn load_canvas_context(
     executor: &BuiltinToolExecutor,
     workspace_path: &std::path::Path,
     conversation_id: &str,
+    query: Option<&str>,
 ) -> Option<String> {
-    // 优先读取前端无限画布的工作记忆（memory_nodes，检索式）
+    // 有提示词时优先按词项检索（含连线邻接加权，让与相关节点连线的上下文优先），
+    // 检索无命中再回退全量概览
+    if let Some(query) = query.map(str::trim).filter(|q| !q.is_empty()) {
+        if let Some(text) = crate::application::canvas_memory_rag::load_working_memory_context(
+            workspace_path,
+            conversation_id,
+            Some(query),
+            12,
+        ) {
+            return Some(text);
+        }
+    }
+    // 读取前端无限画布的工作记忆（memory_nodes）
     if let Some(text) = crate::application::canvas_memory_rag::load_working_memory_context(
         workspace_path,
         conversation_id,
@@ -515,8 +659,33 @@ fn execute_generation(
     let provider_id = resolved.adapter.provider_id().to_owned();
 
     // 为 image_generation 加载画布上下文，注入到 prompt 中
+    //（按生成提示词检索：命中的节点 + 其连线邻居优先，作为生成资源的上下文）
     let enriched_prompt = if tool_name == TOOL_IMAGE_GENERATION {
-        match load_canvas_context(executor, &ctx.workspace_path, &ctx.conversation_id) {
+        // 参考图定向上下文优先：参考图对应的画布节点及其连线邻居是本次生成的直接依据
+        let reference_context = reference_image.as_deref().and_then(|reference| {
+            crate::application::canvas_memory_rag::load_reference_context(
+                &ctx.workspace_path,
+                &ctx.conversation_id,
+                reference,
+            )
+        });
+        let general_context = load_canvas_context(
+            executor,
+            &ctx.workspace_path,
+            &ctx.conversation_id,
+            Some(&args.prompt),
+        );
+        let canvas_context = match (reference_context, general_context) {
+            (Some(reference), Some(general)) => Some(format!(
+                "{reference}
+
+{general}"
+            )),
+            (Some(reference), None) => Some(reference),
+            (None, Some(general)) => Some(general),
+            (None, None) => None,
+        };
+        match canvas_context {
             Some(context) if !context.is_empty() => {
                 format!(
                     "{}\n\n[画布上下文 - 当前工作记忆中的图片资源]\n{}",
@@ -554,6 +723,7 @@ fn execute_generation(
         reason: e.to_string(),
     })?;
 
+    let mut canvas_pending_node_id: Option<String> = None;
     let record = repository.create_task(draft).map_err(|e| match e {
         GenerationRepositoryError::Persistence(p) => AgentToolError::Persistence(p),
         other => AgentToolError::ExecutionFailed {
@@ -562,7 +732,29 @@ fn execute_generation(
         },
     })?;
 
+    // 图片生成任务立即在画布挂 pending 占位节点（同步/异步共用）：
+    // 记录 taskId 供完成侧定位补全，参考图能匹配到画布节点时立即连「风格参考」，
+    // 生成过程中参考图与任务即可视化关联。
+    if tool_name == TOOL_IMAGE_GENERATION {
+        match crate::application::canvas_memory_rag::attach_generation_task(
+            &ctx.workspace_path,
+            &ctx.conversation_id,
+            &record.id,
+            &args.prompt,
+            reference_image.as_deref(),
+        ) {
+            Some(node_id) => {
+                canvas_pending_node_id = Some(node_id);
+            }
+            None => eprintln!(
+                "[AgentTool] canvas pending node attach failed: {}",
+                record.id
+            ),
+        }
+    }
+
     // 尝试自动提交到 Provider
+    let mut gen_image_url: Option<String> = None;
     let (submit_status, submit_message) = if let Some(submitter) = &executor.generation_submitter {
         let mut snapshot = serde_json::json!({
             "prompt": record.prompt_text,
@@ -589,6 +781,13 @@ fn execute_generation(
                 // jimeng 代理路径是同步的：immediate_result_url 就是真实图片 CDN URL。
                 // remote_job_id 格式为 "proxy:image:{url}" 或 "proxy:i2i:{url}"，
                 // 统一取 "http" 起始的真实 URL 传回给 LLM。
+                if tool_name == TOOL_IMAGE_GENERATION {
+                    gen_image_url = attempt
+                        .remote_job_id
+                        .as_deref()
+                        .and_then(|u| u.find("http").map(|pos| &u[pos..]))
+                        .map(|u| u.to_owned());
+                }
                 let image_url = attempt
                     .remote_job_id
                     .as_deref()
@@ -638,6 +837,34 @@ fn execute_generation(
         )
     };
 
+    // P3：同步出图路径（代理直接返回图片 URL）——补全 attach 阶段挂的 pending 节点
+    //（填 URL/状态；参考连线已在 attach 时建好，此处不再重复匹配）
+    let mut canvas_node_id: Option<String> = canvas_pending_node_id.clone();
+    if tool_name == TOOL_IMAGE_GENERATION {
+        if let Some(url) = &gen_image_url {
+            match crate::application::canvas_memory_rag::ensure_generation_image_node(
+                &ctx.workspace_path,
+                &ctx.conversation_id,
+                &record.id,
+                url,
+                &args.prompt,
+                None,
+            ) {
+                Some((node_id, linked)) => {
+                    eprintln!(
+                        "[AgentTool] canvas image node ready: task={} node={node_id} reference_linked={linked}",
+                        record.id
+                    );
+                    canvas_node_id = Some(node_id);
+                }
+                None => eprintln!(
+                    "[AgentTool] canvas image node creation failed: {}",
+                    record.id
+                ),
+            }
+        }
+    }
+
     let payload = serde_json::json!({
         "taskId": record.id,
         "ok": submit_status != "failed",
@@ -645,6 +872,8 @@ fn execute_generation(
         "providerName": provider_id,
         "modelName": model_name,
         "prompt": record.prompt_text,
+        "imageUrl": gen_image_url,
+        "canvasNodeId": canvas_node_id,
         "message": submit_message
     });
     Ok(ToolExecutionResult {
@@ -946,7 +1175,9 @@ fn execute_canvas_search(
         "count": hits.len(),
         "results": hits
             .into_iter()
-            .map(|(text, score)| { serde_json::json!({ "text": text, "score": score }) })
+            .map(|(node_id, text, score)| {
+                serde_json::json!({ "nodeId": node_id, "text": text, "score": score })
+            })
             .collect::<Vec<_>>(),
     });
     Ok(ToolExecutionResult {
@@ -985,6 +1216,7 @@ fn execute_canvas_add_note(
                 &ctx.conversation_id,
                 id,
                 3,
+                ctx.current_user_message.as_deref(),
             )
         })
         .unwrap_or(0);
@@ -1023,14 +1255,19 @@ fn execute_canvas_connect(
         &ctx.conversation_id,
         &args.source_query,
         1,
-    );
+    )
+    .into_iter()
+    .next();
     let target = crate::application::canvas_memory_rag::search_nodes(
         &ctx.workspace_path,
         &ctx.conversation_id,
         &args.target_query,
         1,
-    );
-    if source.is_empty() || target.is_empty() {
+    )
+    .into_iter()
+    .next();
+    let (Some((source_id, source_text, _)), Some((target_id, target_text, _))) = (source, target)
+    else {
         let payload = serde_json::json!({
             "ok": false,
             "message": "未找到匹配的节点，请检查检索关键词。"
@@ -1039,16 +1276,361 @@ fn execute_canvas_connect(
             content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
             generation_task_id: None,
         });
-    }
-    let hits = crate::application::canvas_memory_rag::auto_connect_related(
+    };
+    let edge_id = crate::application::canvas_memory_rag::connect_nodes(
         &ctx.workspace_path,
         &ctx.conversation_id,
-        &args.source_query,
-        3,
+        &source_id,
+        &target_id,
+        args.label.as_deref().or(Some("语义相关")),
+    );
+    let message = if edge_id.is_some() {
+        format!("已建立连线：{source_text} → {target_text}")
+    } else {
+        "两个节点之间已存在连线，未重复创建。".to_owned()
+    };
+    let payload = serde_json::json!({
+        "ok": true,
+        "edgeId": edge_id,
+        "message": message,
+    });
+    Ok(ToolExecutionResult {
+        content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
+        generation_task_id: None,
+    })
+}
+
+/// canvas_add_image：在画布上创建图片节点并自动关联相关节点。
+fn execute_canvas_add_image(
+    _executor: &BuiltinToolExecutor,
+    ctx: &ToolContext,
+    arguments: &str,
+) -> Result<ToolExecutionResult, AgentToolError> {
+    #[derive(Debug, Deserialize)]
+    struct Args {
+        url: String,
+        description: Option<String>,
+        x: Option<f64>,
+        y: Option<f64>,
+    }
+    let args: Args = parse_arguments(TOOL_CANVAS_ADD_IMAGE, arguments)?;
+    let node_id = crate::application::canvas_memory_rag::add_canvas_image(
+        &ctx.workspace_path,
+        &ctx.conversation_id,
+        args.url.trim(),
+        args.description.as_deref(),
+        args.x,
+        args.y,
+        None,
+    );
+    let connected = node_id
+        .as_ref()
+        .map(|id| {
+            crate::application::canvas_memory_rag::auto_connect_related(
+                &ctx.workspace_path,
+                &ctx.conversation_id,
+                id,
+                3,
+                ctx.current_user_message.as_deref(),
+            )
+        })
+        .unwrap_or(0);
+    let payload = serde_json::json!({
+        "ok": node_id.is_some(),
+        "nodeId": node_id,
+        "autoConnected": connected,
+        "message": if node_id.is_some() {
+            format!("已在画布上创建图片节点，并自动关联了 {connected} 个相关节点。")
+        } else {
+            "画布图片节点创建失败。".to_owned()
+        }
+    });
+    Ok(ToolExecutionResult {
+        content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
+        generation_task_id: None,
+    })
+}
+
+/// canvas_update_node：更新节点文本 / 颜色。
+fn execute_canvas_update_node(
+    _executor: &BuiltinToolExecutor,
+    ctx: &ToolContext,
+    arguments: &str,
+) -> Result<ToolExecutionResult, AgentToolError> {
+    #[derive(Debug, Deserialize)]
+    struct Args {
+        #[serde(rename = "nodeId")]
+        node_id: String,
+        text: Option<String>,
+        color: Option<String>,
+    }
+    let args: Args = parse_arguments(TOOL_CANVAS_UPDATE_NODE, arguments)?;
+    if args.text.is_none() && args.color.is_none() {
+        return Err(AgentToolError::InvalidArguments {
+            tool: TOOL_CANVAS_UPDATE_NODE.to_owned(),
+            reason: "text 与 color 至少提供一项".to_owned(),
+        });
+    }
+    let updated = crate::application::canvas_memory_rag::update_canvas_node(
+        &ctx.workspace_path,
+        &ctx.conversation_id,
+        args.node_id.trim(),
+        args.text.as_deref(),
+        args.color.as_deref(),
+    );
+    let payload = serde_json::json!({
+        "ok": updated.is_some(),
+        "nodeId": updated,
+        "message": if updated.is_some() {
+            "节点已更新。".to_owned()
+        } else {
+            "未找到该节点，请用 canvas_search 重新检索。".to_owned()
+        }
+    });
+    Ok(ToolExecutionResult {
+        content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
+        generation_task_id: None,
+    })
+}
+
+/// canvas_auto_layout：按类型分组自动整理画布。
+fn execute_canvas_auto_layout(
+    _executor: &BuiltinToolExecutor,
+    ctx: &ToolContext,
+    arguments: &str,
+) -> Result<ToolExecutionResult, AgentToolError> {
+    let _: serde_json::Value = parse_arguments(TOOL_CANVAS_AUTO_LAYOUT, arguments)?;
+    let moved = crate::application::canvas_memory_rag::auto_layout_canvas(
+        &ctx.workspace_path,
+        &ctx.conversation_id,
     );
     let payload = serde_json::json!({
         "ok": true,
-        "message": format!("已建立连线（自动关联 {} 个相关节点）。", hits),
+        "moved": moved,
+        "message": format!("画布整理完成，移动了 {moved} 个节点。"),
+    });
+    Ok(ToolExecutionResult {
+        content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
+        generation_task_id: None,
+    })
+}
+
+/// canvas_export：导出画布 JSON（dataUrl 省略）。
+fn execute_canvas_export(
+    _executor: &BuiltinToolExecutor,
+    ctx: &ToolContext,
+    arguments: &str,
+) -> Result<ToolExecutionResult, AgentToolError> {
+    let _: serde_json::Value = parse_arguments(TOOL_CANVAS_EXPORT, arguments)?;
+    let exported = crate::application::canvas_memory_rag::export_canvas(
+        &ctx.workspace_path,
+        &ctx.conversation_id,
+    );
+    let payload = serde_json::json!({
+        "ok": exported.is_some(),
+        "canvas": exported,
+        "message": if exported.is_some() {
+            "画布已导出。".to_owned()
+        } else {
+            "画布为空或不存在。".to_owned()
+        }
+    });
+    Ok(ToolExecutionResult {
+        content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
+        generation_task_id: None,
+    })
+}
+
+// ── 插件中心：技能与 MCP（Agent 自助调用） ──
+
+use crate::application::mcp_client;
+use crate::application::plugin_service;
+
+/// list_skills：列出已安装技能。
+fn execute_list_skills(
+    _executor: &BuiltinToolExecutor,
+    ctx: &ToolContext,
+    arguments: &str,
+) -> Result<ToolExecutionResult, AgentToolError> {
+    let _: serde_json::Value = parse_arguments(TOOL_LIST_SKILLS, arguments)?;
+    let skills = plugin_service::list_skills(&ctx.workspace_path).map_err(|e| {
+        AgentToolError::ExecutionFailed {
+            tool: TOOL_LIST_SKILLS.to_owned(),
+            reason: e.to_string(),
+        }
+    })?;
+    let payload = serde_json::json!({
+        "count": skills.len(),
+        "skills": skills,
+        "message": if skills.is_empty() {
+            "尚未安装任何技能。".to_owned()
+        } else {
+            format!("共 {} 个技能，用 use_skill 加载指令。", skills.len())
+        }
+    });
+    Ok(ToolExecutionResult {
+        content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
+        generation_task_id: None,
+    })
+}
+
+/// use_skill：返回技能指令正文，要求 LLM 按指令执行。
+fn execute_use_skill(
+    _executor: &BuiltinToolExecutor,
+    ctx: &ToolContext,
+    arguments: &str,
+) -> Result<ToolExecutionResult, AgentToolError> {
+    #[derive(Debug, Deserialize)]
+    struct Args {
+        name: String,
+    }
+    let args: Args = parse_arguments(TOOL_USE_SKILL, arguments)?;
+    let skills = plugin_service::list_skills(&ctx.workspace_path).map_err(|e| {
+        AgentToolError::ExecutionFailed {
+            tool: TOOL_USE_SKILL.to_owned(),
+            reason: e.to_string(),
+        }
+    })?;
+    let meta = skills
+        .iter()
+        .find(|s| s.name == args.name || s.slug == args.name)
+        .ok_or_else(|| AgentToolError::ExecutionFailed {
+            tool: TOOL_USE_SKILL.to_owned(),
+            reason: format!("技能「{}」不存在，用 list_skills 查看可用技能。", args.name),
+        })?;
+    let body = plugin_service::get_skill_body(&ctx.workspace_path, &meta.slug).map_err(|e| {
+        AgentToolError::ExecutionFailed {
+            tool: TOOL_USE_SKILL.to_owned(),
+            reason: e.to_string(),
+        }
+    })?;
+    let content = format!(
+        "以下是技能「{}」的指令：
+
+{}
+
+请严格按上述技能指令完成用户任务。",
+        meta.name, body
+    );
+    let payload = serde_json::json!({
+        "ok": true,
+        "skill": meta.name,
+        "instructions": content,
+        "message": format!("已加载技能「{}」，请按指令执行。", meta.name)
+    });
+    Ok(ToolExecutionResult {
+        content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
+        generation_task_id: None,
+    })
+}
+
+/// mcp_list_tools：列出 MCP 服务器概览或某服务器的工具清单。
+fn execute_mcp_list_tools(
+    _executor: &BuiltinToolExecutor,
+    ctx: &ToolContext,
+    arguments: &str,
+) -> Result<ToolExecutionResult, AgentToolError> {
+    #[derive(Debug, Deserialize)]
+    struct Args {
+        server: Option<String>,
+    }
+    let args: Args = parse_arguments(TOOL_MCP_LIST_TOOLS, arguments)?;
+    let servers = plugin_service::list_mcp_servers(&ctx.workspace_path).map_err(|e| {
+        AgentToolError::ExecutionFailed {
+            tool: TOOL_MCP_LIST_TOOLS.to_owned(),
+            reason: e.to_string(),
+        }
+    })?;
+
+    let Some(server_name) = args
+        .server
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
+        let enabled: Vec<_> = servers.iter().filter(|s| s.enabled).collect();
+        let payload = serde_json::json!({
+            "count": enabled.len(),
+            "servers": enabled
+                .iter()
+                .map(|s| serde_json::json!({ "name": s.name, "command": s.command }))
+                .collect::<Vec<_>>(),
+            "message": if enabled.is_empty() {
+                "尚未启用任何 MCP 服务器。".to_owned()
+            } else {
+                "传 server 名称可查看该服务器提供的工具清单。".to_owned()
+            }
+        });
+        return Ok(ToolExecutionResult {
+            content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
+            generation_task_id: None,
+        });
+    };
+
+    let config = servers
+        .iter()
+        .find(|s| s.enabled && (s.name == server_name || s.id == server_name))
+        .ok_or_else(|| AgentToolError::ExecutionFailed {
+            tool: TOOL_MCP_LIST_TOOLS.to_owned(),
+            reason: format!("MCP 服务器「{server_name}」不存在或未启用。"),
+        })?;
+    let tools = mcp_client::list_tools(config).map_err(|e| AgentToolError::ExecutionFailed {
+        tool: TOOL_MCP_LIST_TOOLS.to_owned(),
+        reason: e.to_string(),
+    })?;
+    let payload = serde_json::json!({
+        "server": server_name,
+        "count": tools.len(),
+        "tools": tools,
+        "message": format!("服务器「{server_name}」提供 {} 个工具，用 mcp_call 调用。", tools.len())
+    });
+    Ok(ToolExecutionResult {
+        content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
+        generation_task_id: None,
+    })
+}
+
+/// mcp_call：调用 MCP 服务器工具。
+fn execute_mcp_call(
+    _executor: &BuiltinToolExecutor,
+    ctx: &ToolContext,
+    arguments: &str,
+) -> Result<ToolExecutionResult, AgentToolError> {
+    #[derive(Debug, Deserialize)]
+    struct Args {
+        server: String,
+        tool: String,
+        #[serde(default)]
+        arguments: Option<serde_json::Value>,
+    }
+    let args: Args = parse_arguments(TOOL_MCP_CALL, arguments)?;
+    let servers = plugin_service::list_mcp_servers(&ctx.workspace_path).map_err(|e| {
+        AgentToolError::ExecutionFailed {
+            tool: TOOL_MCP_CALL.to_owned(),
+            reason: e.to_string(),
+        }
+    })?;
+    let config = servers
+        .iter()
+        .find(|s| s.enabled && (s.name == args.server || s.id == args.server))
+        .ok_or_else(|| AgentToolError::ExecutionFailed {
+            tool: TOOL_MCP_CALL.to_owned(),
+            reason: format!("MCP 服务器「{}」不存在或未启用。", args.server),
+        })?;
+    let content = mcp_client::call_tool(
+        config,
+        &args.tool,
+        args.arguments.unwrap_or(serde_json::json!({})),
+    )
+    .map_err(|e| AgentToolError::ExecutionFailed {
+        tool: TOOL_MCP_CALL.to_owned(),
+        reason: e.to_string(),
+    })?;
+    let payload = serde_json::json!({
+        "ok": true,
+        "server": args.server,
+        "tool": args.tool,
+        "content": content,
     });
     Ok(ToolExecutionResult {
         content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
@@ -1464,6 +2046,7 @@ mod tests {
             output_directory: None,
             sandbox: None,
             latest_user_image: None,
+            current_user_message: None,
         };
         let result = executor.execute(&ctx, TOOL_CURRENT_TIME, "{}").unwrap();
         assert!(result.content.contains("iso8601"));
@@ -1480,6 +2063,7 @@ mod tests {
             output_directory: None,
             sandbox: None,
             latest_user_image: None,
+            current_user_message: None,
         };
         let result = executor.execute(&ctx, TOOL_LIST_CREDENTIALS, "{}").unwrap();
         assert!(result.content.contains("Seedance"));
@@ -1501,6 +2085,7 @@ mod tests {
             output_directory: None,
             sandbox: None,
             latest_user_image: None,
+            current_user_message: None,
         };
         let args = r#"{"providerName":"Seedance","modelName":"seedance-v2","prompt":"跳舞的猫"}"#;
         let result = executor.execute(&ctx, TOOL_IMAGE_GENERATION, args).unwrap();
@@ -1535,6 +2120,7 @@ mod tests {
             output_directory: None,
             sandbox: None,
             latest_user_image: None,
+            current_user_message: None,
         };
         let args = r#"{"modelName":"m","prompt":"跳舞的猫"}"#;
         let result = executor.execute(&ctx, TOOL_IMAGE_GENERATION, args).unwrap();
@@ -1571,6 +2157,7 @@ mod tests {
             output_directory: None,
             sandbox: None,
             latest_user_image: None,
+            current_user_message: None,
         };
         let error = executor
             .execute(&ctx, "nonexistent_tool", "{}")
@@ -1588,6 +2175,7 @@ mod tests {
             output_directory: None,
             sandbox: None,
             latest_user_image: None,
+            current_user_message: None,
         };
         let error = executor
             .execute(&ctx, TOOL_IMAGE_GENERATION, "not json")
@@ -1605,6 +2193,7 @@ mod tests {
             output_directory: None,
             sandbox: None,
             latest_user_image: None,
+            current_user_message: None,
         };
         let args = serde_json::json!({"scriptText": ""});
         let error = executor
@@ -1637,6 +2226,7 @@ mod tests {
             output_directory: None,
             sandbox: None,
             latest_user_image: None,
+            current_user_message: None,
         };
         let args = serde_json::json!({
             "scriptText": "场景一：城市全景\n镜头从高空俯瞰赛博朋克城市。\n\n场景二：街道\n一名少年走在雨中。"

@@ -25,6 +25,7 @@ pub mod resource_account_repository;
 pub mod resource_repository;
 pub mod review_repository;
 pub mod semantic_repository;
+pub mod vector_repository;
 pub mod workflow_execution_repository;
 pub mod workspace_repository;
 

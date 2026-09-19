@@ -353,6 +353,7 @@ impl AgentService {
     }
 
     /// 设置生成输出目录。前端在用户选择目录后调用。
+    /// 同时写入全局 project_output，供生成流水线导出到用户工作目录。
     pub fn set_output_directory(&self, path: Option<PathBuf>) {
         // 透传给 AgentRuntime。
         if let Ok(rt_guard) = self.agent_runtime.lock() {
@@ -361,8 +362,9 @@ impl AgentService {
             }
         }
         if let Ok(mut dir) = self.output_directory.lock() {
-            *dir = path;
+            *dir = path.clone();
         }
+        crate::application::project_output::set_output_dir(path);
     }
 
     pub fn with_creative_director(mut self, director: Arc<CreativeDirectorService>) -> Self {
@@ -478,17 +480,27 @@ impl AgentService {
     /// 2. 规划阶段：LLM 生成编号计划 → 持久化 → 推送 PlanCreated
     /// 3. 执行阶段：逐步执行计划，每步运行工具循环
     /// 4. 如果工具为 ask_user_question，中断循环等待用户回答
+    ///
+    /// `system_prompt_override`：技能（Skills）编译出的提示词片段，
+    /// 追加到会话系统提示词之后，只影响本轮 LLM 调用，不污染用户消息。
     pub fn send_message(
         &self,
         app: &AppHandle,
         conversation_id: &str,
         user_content: String,
         image_data_urls: Vec<String>,
+        system_prompt_override: Option<String>,
     ) -> Result<SendMessageResult, AppError> {
         // 委托给 AgentRuntime（拆分后的核心编排器）。
         if let Ok(rt_guard) = self.agent_runtime.lock() {
             if let Some(rt) = rt_guard.as_ref() {
-                return rt.send_message(app, conversation_id, user_content, image_data_urls);
+                return rt.send_message(
+                    app,
+                    conversation_id,
+                    user_content,
+                    image_data_urls,
+                    system_prompt_override,
+                );
             }
         }
 
@@ -532,13 +544,18 @@ impl AgentService {
         );
 
         // 2. 加载会话 + 凭据，构造 LLM 适配器。
-        let conversation = self.with_agent_repository(|repo| {
+        let mut conversation = self.with_agent_repository(|repo| {
             repo.get_conversation(conversation_id)?
                 .ok_or_else(|| {
                     AgentRepositoryError::ConversationNotFound(conversation_id.to_owned())
                 })
                 .map_err(AppError::from)
         })?;
+        // 技能覆盖：追加到系统提示词（响应缓存 key 也随之包含技能状态）。
+        if let Some(override_prompt) = system_prompt_override {
+            conversation.system_prompt =
+                merge_system_prompt(conversation.system_prompt.take(), &override_prompt);
+        }
 
         // 语义响应缓存：直接回答类消息（打招呼/闲聊）重复出现时，
         // 直接返回缓存回答，跳过凭据加载与 LLM 调用。
@@ -1019,6 +1036,7 @@ impl AgentService {
                 step,
                 &current_plan.steps,
                 memory_context,
+                conversation.system_prompt.as_deref(),
             );
 
             // 执行当前步骤的工具循环。
@@ -1367,6 +1385,7 @@ impl AgentService {
             conversation_id: conversation_id.to_owned(),
             sandbox: None,
             latest_user_image: None,
+            current_user_message: None,
         };
         eprintln!(
             "[AgentTool] execute start name={} conv={conversation_id}",
@@ -1596,6 +1615,22 @@ impl AgentService {
     }
 }
 
+/// 将技能（Skills）覆盖片段合并到会话系统提示词。
+///
+/// override 追加在自定义系统提示词之后（语义上作为本轮的强化约束）；
+/// 基础提示词为空时直接使用 override。
+pub(crate) fn merge_system_prompt(base: Option<String>, override_text: &str) -> Option<String> {
+    if override_text.trim().is_empty() {
+        return base;
+    }
+    Some(match base {
+        Some(existing) if !existing.trim().is_empty() => {
+            format!("{}\n\n{}", existing, override_text)
+        }
+        _ => override_text.to_owned(),
+    })
+}
+
 /// 构建规划阶段系统提示词（带记忆上下文）。
 #[cfg(test)]
 fn build_planning_system_prompt_with_memory(
@@ -1670,6 +1705,7 @@ fn build_execution_system_prompt(
     current_step: &PlanStep,
     all_steps: &[PlanStep],
     memory_context: Option<&str>,
+    user_system_prompt: Option<&str>,
 ) -> String {
     let steps_list: String = all_steps
         .iter()
@@ -1700,6 +1736,15 @@ fn build_execution_system_prompt(
             prompt.push_str("\n\n[相关记忆]\n");
             prompt.push_str(mem);
             prompt.push_str("\n请在执行时参考以上记忆，贴合学生偏好。");
+        }
+    }
+
+    // 注入会话级设定（用户自定义系统提示词 + 技能 + 项目记忆，
+    // 发送时已合并进 conversation.system_prompt）。
+    if let Some(custom) = user_system_prompt {
+        if !custom.trim().is_empty() {
+            prompt.push_str("\n\n[项目与技能设定]\n");
+            prompt.push_str(custom);
         }
     }
 
@@ -2153,7 +2198,7 @@ mod tests {
                 kind: Default::default(),
             },
         ];
-        let prompt = build_execution_system_prompt("画一只猫", &steps[1], &steps, None);
+        let prompt = build_execution_system_prompt("画一只猫", &steps[1], &steps, None, None);
         assert!(prompt.contains("✓ 1. 生成图片"));
         assert!(prompt.contains("→ 2. 调整风格"));
         assert!(prompt.contains("第 2 步"));
@@ -2169,8 +2214,14 @@ mod tests {
             status: PlanStepStatus::Pending,
             kind: Default::default(),
         }];
-        let a = build_execution_system_prompt("目标A", &steps[0], &steps, None);
-        let b = build_execution_system_prompt("目标B", &steps[0], &steps, Some("- 学生喜欢水彩风"));
+        let a = build_execution_system_prompt("目标A", &steps[0], &steps, None, None);
+        let b = build_execution_system_prompt(
+            "目标B",
+            &steps[0],
+            &steps,
+            Some("- 学生喜欢水彩风"),
+            None,
+        );
         assert!(a.starts_with(EXECUTION_STATIC_PREFIX));
         assert!(b.starts_with(EXECUTION_STATIC_PREFIX));
     }
@@ -2188,6 +2239,7 @@ mod tests {
             &steps[0],
             &steps,
             Some("- (已知事实) 学生喜欢日系动漫风格"),
+            None,
         );
         assert!(prompt.contains("[相关记忆]"));
         assert!(prompt.contains("日系动漫"));

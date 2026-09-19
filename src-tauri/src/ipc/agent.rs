@@ -53,6 +53,8 @@ pub struct SendMessageRequest {
     pub conversation_id: String,
     pub content: String,
     pub attachments: Option<Vec<AttachmentInput>>,
+    /// 技能（Skills）编译出的系统提示词覆盖片段，追加到会话系统提示词之后。
+    pub system_prompt_override: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -171,6 +173,7 @@ pub async fn agent_v1_send_message(
             &request.conversation_id,
             request.content,
             image_data_urls,
+            request.system_prompt_override,
         )
     })
     .await
@@ -240,10 +243,43 @@ pub async fn agent_v1_set_output_directory(
     request: SetOutputDirectoryRequest,
 ) -> Result<(), IpcError> {
     let path = request.path.map(std::path::PathBuf::from);
+    // 打开工作目录时落地 .openaigc 项目文件夹（对标 .claude/.codex 惯例）。
+    if let Some(dir) = &path {
+        tauri::async_runtime::spawn_blocking({
+            let dir = dir.clone();
+            move || crate::application::project_folder::ensure_project_folder(&dir)
+        });
+    }
     let service = app.state::<AgentService>();
     eprintln!("[Agent] set_output_directory: {:?}", path);
     service.set_output_directory(path);
     Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReadProjectMemoryRequest {
+    /// 工作目录路径。
+    pub path: String,
+}
+
+/// 读取工作目录的项目记忆（`.openaigc/AIGC.md`）。
+/// 缺失或读取失败时返回 null（记忆注入是尽力而为的增强）。
+#[tauri::command]
+pub async fn agent_v1_read_project_memory(
+    request: ReadProjectMemoryRequest,
+) -> Result<Option<String>, IpcError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = std::path::PathBuf::from(&request.path);
+        if !dir.is_dir() {
+            return Ok(None);
+        }
+        Ok(crate::application::project_folder::read_project_memory(
+            &dir,
+        ))
+    })
+    .await
+    .map_err(|_| IpcError::task_failed())?
 }
 
 // ── Semantic Pipeline — 图片语义分析 ──

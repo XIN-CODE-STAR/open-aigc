@@ -10,6 +10,21 @@
     "core:event:allow-unlisten",
     "core:event:allow-emit",
     "core:event:allow-emit-to",
+    "core:webview:allow-internal-toggle-devtools",
+    "allow-workspace-v1-get-root-path",
+    "allow-skill-v1-list",
+    "allow-skill-v1-scan-local",
+    "allow-skill-v1-import",
+    "allow-skill-v1-download",
+    "allow-skill-v1-delete",
+    "allow-skill-v1-get-body",
+    "allow-mcp-v1-list",
+    "allow-mcp-v1-add",
+    "allow-mcp-v1-update",
+    "allow-mcp-v1-remove",
+    "allow-mcp-v1-toggle",
+    "allow-mcp-v1-scan-local",
+    "allow-mcp-v1-probe",
     "default"
   ]
 }

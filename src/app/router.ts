@@ -8,6 +8,7 @@ const GenerationsPage = () => import("../modules/generations/pages/GenerationsPa
 const PromptsPage = () => import("../modules/prompts/pages/PromptsPage.vue");
 const SettingsPage = () => import("../modules/settings/pages/SettingsPage.vue");
 const BackupPage = () => import("../modules/backup/pages/BackupPage.vue");
+const PluginsPage = () => import("../modules/plugins/pages/PluginsPage.vue");
 const ModelsPage = () => import("../modules/models/pages/ModelsPage.vue");
 const ModuleLandingPage = () => import("./pages/ModuleLandingPage.vue");
 
@@ -39,6 +40,11 @@ const routes: RouteRecordRaw[] = [
     path: "/backup",
     component: BackupPage,
     meta: { title: "备份" },
+  },
+  {
+    path: "/plugins",
+    component: PluginsPage,
+    meta: { title: "插件中心" },
   },
   {
     path: "/models",

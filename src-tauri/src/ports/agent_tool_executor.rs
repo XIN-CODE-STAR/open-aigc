@@ -19,6 +19,8 @@ pub struct ToolContext {
     pub sandbox: Option<Arc<SandboxPolicy>>,
     /// 对话中最近一张用户上传的图片（data URL）。存在时图片生成默认走图生图。
     pub latest_user_image: Option<String>,
+    /// 用户当前消息文本。画布自动连线用它结合上下文判断关联与推导边标签。
+    pub current_user_message: Option<String>,
 }
 
 /// 工具执行结果。

@@ -86,6 +86,8 @@ impl Default for PipelineConfig {
 pub struct GenerationPipeline {
     /// 下载目录。
     download_dir: PathBuf,
+    /// 数据库路径（用于导出到工作目录时反查对话标题）。
+    database_path: Option<PathBuf>,
     /// 资产仓库（用于复用受管文件目录、manifest、去重和完整性规则）。
     asset_repository: Mutex<Box<dyn AssetRepository>>,
     /// 评价仓库（用于持久化评价报告和资产版本）。
@@ -106,12 +108,19 @@ impl GenerationPipeline {
     ) -> Self {
         Self {
             download_dir,
+            database_path: None,
             asset_repository: Mutex::new(Box::new(asset_repository)),
             review_repository: Mutex::new(Box::new(review_repository)),
             vision_adapter: Mutex::new(None),
             vision_credential: None,
             config: PipelineConfig::default(),
         }
+    }
+
+    /// 设置数据库路径，供导出用户工作目录时反查对话标题。
+    pub fn with_database_path(mut self, database_path: PathBuf) -> Self {
+        self.database_path = Some(database_path);
+        self
     }
 
     /// 设置 Vision 适配器（启用 AI Critic）。
@@ -171,6 +180,23 @@ impl GenerationPipeline {
         Self::emit_stage(app, attempt_id, "importing", None);
         let asset = self.import_downloaded_asset(&download)?;
         let asset_id = asset.id.clone();
+
+        // ── Stage 3b: 导出到用户指定的工作目录（若有）──
+        // 受管资产仍保留在 workspace，保证资源库/备份链路完整；
+        // 工作目录是用户可见的创作输出位置。
+        if crate::application::project_output::current_output_dir().is_some() {
+            Self::emit_stage(app, attempt_id, "exporting-workdir", None);
+            let exported = crate::application::project_output::export_generated_file(
+                Path::new(&download.file_path),
+                task_id,
+                self.database_path.as_deref(),
+            );
+            if exported.is_none() {
+                eprintln!(
+                    "[Pipeline] project-dir export skipped/failed for task {task_id} (non-blocking)"
+                );
+            }
+        }
 
         // ── Stage 4: 资产版本 ──────────────────────────
         Self::emit_stage(app, attempt_id, "versioning", None);

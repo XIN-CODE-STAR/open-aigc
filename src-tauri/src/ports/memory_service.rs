@@ -38,6 +38,12 @@ pub trait MemoryServicePort: Send + Sync {
         limit: usize,
     ) -> Result<Vec<MemoryResult>, AppError>;
 
+    /// 存储结构化事实（如画布上的结论便签）到长期记忆。
+    /// 默认无操作：不支持的实现者可忽略。
+    fn remember_facts(&self, _workspace_id: &str, _facts: &[String]) -> Result<(), AppError> {
+        Ok(())
+    }
+
     /// 检查记忆服务是否可用。
     fn is_available(&self) -> bool;
 

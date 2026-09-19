@@ -101,6 +101,27 @@ impl MemoryServicePort for MemoryServiceImpl {
         Ok(())
     }
 
+    /// 事实沉淀：作为 assistant 消息写入会话记忆（EverOS 以消息为记忆载体）。
+    fn remember_facts(&self, workspace_id: &str, facts: &[String]) -> Result<(), AppError> {
+        if !self.inner.config.enabled || facts.is_empty() {
+            return Ok(());
+        }
+        let timestamp = time::OffsetDateTime::now_utc().unix_timestamp();
+        let messages: Vec<crate::adapters::everos::client::EverosMessage> = facts
+            .iter()
+            .map(|content| crate::adapters::everos::client::EverosMessage {
+                sender_id: "canvas-fact".to_owned(),
+                role: "assistant".to_owned(),
+                timestamp,
+                content: content.clone(),
+            })
+            .collect();
+        let session_id = format!("conv-{workspace_id}");
+        let _ = self.inner.client.add_messages(&session_id, &messages);
+        let _ = self.inner.client.flush(&session_id);
+        Ok(())
+    }
+
     fn recall(
         &self,
         workspace_id: &str,

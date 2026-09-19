@@ -82,10 +82,39 @@ pub async fn generation_v1_record_output(
     app: AppHandle,
     request: RecordOutputRequest,
 ) -> Result<GenerationResultRecord, IpcError> {
-    with_generation_service_write(app, move |service, _workspace_service| {
-        service.record_output(&request.task_id, request.source_path)
+    let task_id = request.task_id;
+    let image_url = request.source_path.clone();
+    // 画布写回钩子（异步路径）用：任务若来自 Agent 画布（挂过 pending 占位节点），
+    // 按 taskId 定位并补全图片 URL/状态。找不到占位节点则静默跳过。
+    let canvas_task_id = task_id.clone();
+    let canvas_image_url = image_url.clone();
+    let result = with_generation_service_write(app.clone(), move |service, _workspace_service| {
+        service.record_output(&task_id, image_url)
     })
-    .await
+    .await?;
+
+    let workspace_dir = app
+        .path()
+        .app_local_data_dir()
+        .map(|dir| dir.join("workspace"))
+        .map_err(|e| IpcError::from(AppError::new("resolve workspace dir", e)))?;
+    let canvas_write_back = tauri::async_runtime::spawn_blocking(move || {
+        if let Some(node_id) =
+            crate::application::canvas_memory_rag::complete_generation_task_by_task_id(
+                &workspace_dir,
+                &canvas_task_id,
+                &canvas_image_url,
+            )
+        {
+            eprintln!(
+                "[Canvas] async generation written back: task={canvas_task_id} node={node_id}"
+            );
+        }
+    });
+    // 写回很快（本地 SQLite），等它完成保证命令返回时画布已更新
+    let _ = canvas_write_back.await;
+
+    Ok(result)
 }
 
 #[tauri::command]

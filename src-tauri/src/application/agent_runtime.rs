@@ -108,6 +108,7 @@ impl AgentRuntime {
         conversation_id: &str,
         user_content: String,
         image_data_urls: Vec<String>,
+        system_prompt_override: Option<String>,
     ) -> Result<SendMessageResult, AppError> {
         eprintln!(
             "[AgentRuntime] send_message conv={} content_len={} attachments={}",
@@ -216,13 +217,21 @@ impl AgentRuntime {
         };
 
         // 3. 加载会话 + 凭据。
-        let conversation = self.with_agent_repository(|repo| {
+        let mut conversation = self.with_agent_repository(|repo| {
             repo.get_conversation(conversation_id)?
                 .ok_or_else(|| {
                     AgentRepositoryError::ConversationNotFound(conversation_id.to_owned())
                 })
                 .map_err(AppError::from)
         })?;
+        // 技能（Skills）覆盖：追加到系统提示词，随记忆注入一起进入规划阶段；
+        // 响应缓存 key 同样包含技能状态，不同技能组合不会串缓存。
+        if let Some(override_prompt) = system_prompt_override {
+            conversation.system_prompt = super::agent_service::merge_system_prompt(
+                conversation.system_prompt.take(),
+                &override_prompt,
+            );
+        }
 
         // 语义响应缓存：直接回答类消息命中后跳过 LLM。
         if let Some(cached) = self
@@ -302,6 +311,21 @@ impl AgentRuntime {
                 (Some(memory), Some(canvas)) => Some(format!("{memory}\n\n{canvas}")),
                 (Some(memory), None) => Some(memory),
                 (None, Some(canvas)) => Some(canvas),
+                (None, None) => None,
+            }
+        };
+        // 4.6 插件上下文（插件中心）：让 agent 感知已安装技能与 MCP 服务器，
+        // 通过 list_skills / use_skill / mcp_list_tools / mcp_call 工具自助调用。
+        let memory_context = {
+            let plugin_context = crate::application::plugin_service::load_plugin_context(
+                self.database_path
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new(".")),
+            );
+            match (memory_context, plugin_context) {
+                (Some(memory), Some(plugins)) => Some(format!("{memory}\n\n{plugins}")),
+                (Some(memory), None) => Some(memory),
+                (None, Some(plugins)) => Some(plugins),
                 (None, None) => None,
             }
         };
@@ -424,6 +448,29 @@ impl AgentRuntime {
         if let Ok(history) = self.execution_engine.list_messages(conversation_id) {
             self.memory_context
                 .store_memory(&conversation.workspace_id, conversation_id, &history);
+        }
+
+        // 画布结论沉淀：本轮 Agent 写入画布、尚未沉淀的便签 → 长期记忆（事实）。
+        // 长期记忆未启用时 collect 后的 store 是无操作，标记仍会写回避免重复收集。
+        let unsynced_notes = crate::application::canvas_memory_rag::collect_unsynced_agent_notes(
+            &self.database_path,
+            conversation_id,
+        );
+        if !unsynced_notes.is_empty() {
+            let facts: Vec<String> = unsynced_notes
+                .iter()
+                .map(|(_, text)| format!("[画布结论] {text}"))
+                .collect();
+            self.memory_context
+                .store_canvas_facts(&conversation.workspace_id, &facts);
+            crate::application::canvas_memory_rag::mark_agent_notes_synced(
+                &self.database_path,
+                conversation_id,
+                &unsynced_notes
+                    .into_iter()
+                    .map(|(id, _)| id)
+                    .collect::<Vec<_>>(),
+            );
         }
 
         result
