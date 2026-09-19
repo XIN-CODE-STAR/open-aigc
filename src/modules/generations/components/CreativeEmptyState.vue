@@ -10,10 +10,20 @@
  *
  * 空状态时作为主页面居中展示，替代传统的"无内容"提示。
  */
-import { computed } from "vue";
-import { ChevronDown, FolderOpen, Image, RotateCcw, Send, Sparkles, X } from "@lucide/vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  ChevronDown,
+  FolderOpen,
+  FolderPlus,
+  Image,
+  RotateCcw,
+  Send,
+  Sparkles,
+  X,
+} from "@lucide/vue";
 
 import type { CredentialRecord } from "../../../bridge/credentials";
+import { projectDirName } from "../../../app/stores/projectDirectory";
 import CreationParameterBar from "./CreationParameterBar.vue";
 import MemoryStatusBadge from "./MemoryStatusBadge.vue";
 
@@ -78,6 +88,8 @@ const props = defineProps<{
   referenceImages?: { name: string; dataUrl: string; mimeType: string }[];
   /** 是否正在拖拽文件（由父组件 document 级别事件驱动）。 */
   isDraggingFile?: boolean;
+  /** 最近打开过的工作目录（最新在前）。 */
+  recentProjects?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -97,6 +109,7 @@ const emit = defineEmits<{
   "remove-reference": [index: number];
   "select-directory": [];
   "reset-directory": [];
+  "select-project": [path: string];
 }>();
 
 /** 是否正在拖拽文件（由父组件 document 级别事件驱动，不需要本地处理）。 */
@@ -136,6 +149,44 @@ function toggleMore(): void {
   emit("update:show-mode-menu", !props.showModeMenu);
 }
 
+/** 目录选择下拉：最近工作目录 + 添加新项目。 */
+const showDirMenu = ref(false);
+const dirMenuRef = ref<HTMLElement | null>(null);
+const recentProjectsList = computed(() => props.recentProjects ?? []);
+
+function toggleDirMenu(): void {
+  if (recentProjectsList.value.length === 0) {
+    emit("select-directory");
+    return;
+  }
+  showDirMenu.value = !showDirMenu.value;
+}
+
+function pickRecent(path: string): void {
+  showDirMenu.value = false;
+  emit("select-project", path);
+}
+
+function addNewProject(): void {
+  showDirMenu.value = false;
+  emit("select-directory");
+}
+
+function onDocumentClick(event: MouseEvent): void {
+  const target = event.target as Node | null;
+  if (dirMenuRef.value && target && !dirMenuRef.value.contains(target)) {
+    showDirMenu.value = false;
+  }
+}
+
+onMounted(() => {
+  document.addEventListener("click", onDocumentClick);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("click", onDocumentClick);
+});
+
 function pickExample(example: ExamplePrompt): void {
   emit("pick", example);
 }
@@ -155,26 +206,53 @@ function pickExample(example: ExamplePrompt): void {
     <div class="welcome__input-group">
       <!-- 资源栏：文件夹选择 + 已上传图片（同一行） -->
       <div class="welcome__resources">
-        <button
-          type="button"
-          class="welcome__resource-btn"
-          :title="projectDirectory ? '更换输出目录' : '选择输出目录'"
-          @click="emit('select-directory')"
-        >
-          <FolderOpen :size="14" />
-          <span class="welcome__resource-label">
-            {{ projectDirectory ? projectDisplayName : "打开" }}
-          </span>
+        <span ref="dirMenuRef" class="dir-anchor">
           <button
-            v-if="projectDirectory"
             type="button"
-            class="welcome__resource-reset"
-            title="恢复默认目录"
-            @click.stop="emit('reset-directory')"
+            class="welcome__resource-btn"
+            :title="projectDirectory ? '切换输出目录' : '选择输出目录'"
+            @click="toggleDirMenu"
           >
-            <RotateCcw :size="10" />
+            <FolderOpen :size="14" />
+            <span class="welcome__resource-label">
+              {{ projectDirectory ? projectDisplayName : "打开" }}
+            </span>
+            <button
+              v-if="projectDirectory"
+              type="button"
+              class="welcome__resource-reset"
+              title="恢复默认目录"
+              @click.stop="emit('reset-directory')"
+            >
+              <RotateCcw :size="10" />
+            </button>
           </button>
-        </button>
+          <Transition name="dir-menu">
+            <div v-if="showDirMenu" class="dir-menu dir-menu--down">
+              <div class="dir-menu__section">最近打开</div>
+              <button
+                v-for="item in recentProjectsList"
+                :key="item"
+                type="button"
+                class="dir-menu__item"
+                :title="item"
+                @click="pickRecent(item)"
+              >
+                <FolderOpen :size="13" />
+                <span class="dir-menu__name">{{ projectDirName(item) }}</span>
+              </button>
+              <div class="dir-menu__divider" />
+              <button
+                type="button"
+                class="dir-menu__item dir-menu__item--add"
+                @click="addNewProject"
+              >
+                <FolderPlus :size="13" />
+                <span class="dir-menu__name">添加新项目</span>
+              </button>
+            </div>
+          </Transition>
+        </span>
         <!-- 已上传图片 chips（与文件夹按钮同行、同尺寸） -->
         <template v-if="referenceImages && referenceImages.length > 0">
           <div v-for="(img, idx) in referenceImages" :key="idx" class="welcome__ref-chip">
@@ -393,6 +471,89 @@ function pickExample(example: ExamplePrompt): void {
   background: var(--color-surface-hover);
   border-color: var(--color-border);
   color: var(--color-text);
+}
+
+/* 目录选择下拉：锚定在打开按钮下方（欢迎页位于页面中部） */
+.dir-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.dir-menu--down {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+.dir-menu {
+  position: absolute;
+  left: 0;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 6px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-surface, #171c26);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 35%);
+  z-index: 50;
+}
+
+.dir-menu__section {
+  padding: 4px 10px 6px;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.dir-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.dir-menu__item:hover {
+  background: var(--color-surface-hover);
+}
+
+.dir-menu__item--add {
+  color: var(--color-accent);
+}
+
+.dir-menu__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dir-menu__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--color-border-subtle);
+}
+
+.dir-menu-enter-active,
+.dir-menu-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 140ms var(--ease-out, ease);
+}
+
+.dir-menu-enter-from,
+.dir-menu-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .welcome__resource-label {

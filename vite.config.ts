@@ -26,7 +26,8 @@ export default defineConfig(async () => ({
       : undefined,
     watch: {
       // 3. ignore native build output and local QA artifacts
-      ignored: ["**/src-tauri/**", "**/work/**"],
+      // .mimosa：安全扫描器 hook-state 基线文件被独占锁定，watch 会以 EBUSY 崩溃
+      ignored: ["**/src-tauri/**", "**/work/**", "**/.mimosa/**"],
     },
   },
   test: {

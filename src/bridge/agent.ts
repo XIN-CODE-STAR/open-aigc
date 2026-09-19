@@ -268,6 +268,8 @@ const sendMessageRequestSchema = z
     conversationId: z.uuid("会话标识无效。"),
     content: z.string().trim().min(1, "消息内容不能为空。"),
     attachments: z.array(attachmentSchema).optional(),
+    /** 技能（Skills）编译出的系统提示词覆盖片段 */
+    systemPromptOverride: z.string().trim().min(1).optional(),
   })
   .passthrough();
 
@@ -385,10 +387,11 @@ export async function sendMessage(
   conversationId: string,
   content: string,
   attachments?: AttachmentInput[],
+  systemPromptOverride?: string,
 ): Promise<SendMessageResult> {
   const request = parseRequest(
     sendMessageRequestSchema,
-    { conversationId, content, attachments },
+    { conversationId, content, attachments, systemPromptOverride },
     "消息内容无效。",
   );
   return invokeNative("agent_v1_send_message", sendMessageResultSchema, { request });
@@ -399,6 +402,16 @@ export async function sendMessage(
  */
 export async function setOutputDirectory(path: string | null): Promise<void> {
   await invokeNative("agent_v1_set_output_directory", z.union([z.void(), z.null()]), {
+    request: { path },
+  });
+}
+
+/**
+ * 读取工作目录的项目记忆（`.openaigc/AIGC.md`）。
+ * 缺失或读取失败时返回 null（记忆注入是尽力而为的增强）。
+ */
+export async function readProjectMemory(path: string): Promise<string | null> {
+  return invokeNative("agent_v1_read_project_memory", z.string().nullable(), {
     request: { path },
   });
 }

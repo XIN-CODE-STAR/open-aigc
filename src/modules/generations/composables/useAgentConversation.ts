@@ -529,7 +529,11 @@ export function useAgentConversation() {
     lastSentConversationId = null;
   }
 
-  async function sendMessage(content: string, attachments?: AttachmentInput[]): Promise<void> {
+  async function sendMessage(
+    content: string,
+    attachments?: AttachmentInput[],
+    systemPromptOverride?: string,
+  ): Promise<void> {
     if (!currentConversation.value) {
       errorMessage.value = "请先选择或创建一个 Agent 会话。";
       return;
@@ -554,6 +558,7 @@ export function useAgentConversation() {
         conversationId,
         content,
         attachments && attachments.length > 0 ? attachments : undefined,
+        systemPromptOverride,
       );
       // invoke 完成后主动重新加载消息与工具调用，不完全依赖实时事件。
       const [msgRecords, invRecords] = await Promise.all([

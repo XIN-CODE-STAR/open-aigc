@@ -17,8 +17,9 @@ import {
   ChevronDown,
   FileUp,
   FolderOpen,
+  FolderPlus,
   LoaderCircle,
-  Mic,
+  Blocks,
   RotateCcw,
   Send,
   Settings2,
@@ -26,6 +27,7 @@ import {
 } from "@lucide/vue";
 import type { CredentialRecord } from "../../../bridge/credentials";
 import type { ResourceAccountRecord } from "../../../bridge/resourceAccounts";
+import { projectDirName } from "../../../app/stores/projectDirectory";
 import CreationParameterBar from "./CreationParameterBar.vue";
 import ProviderModelSelector from "./ProviderModelSelector.vue";
 import ReferenceAssetStrip from "./ReferenceAssetStrip.vue";
@@ -93,6 +95,10 @@ const props = defineProps<{
   projectDirectory: string | null;
   /** 项目显示名称（文件夹名或 "OPEN AIGC"）。 */
   projectDisplayName: string;
+  /** 当前启用的技能数量（>0 时在扩展按钮上显示角标）。 */
+  activeSkillCount?: number;
+  /** 最近打开过的工作目录（最新在前）。 */
+  recentProjects?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -114,7 +120,9 @@ const emit = defineEmits<{
   /** 切换偏好面板（原顶部栏按钮迁移至此）。 */
   "toggle-preferences": [];
   "select-directory": [];
+  "select-project": [path: string];
   "reset-directory": [];
+  "toggle-mcp": [];
   /** 文件拖入 / 粘贴 / 选择。 */
   "drop-files": [files: FileList];
 }>();
@@ -122,6 +130,11 @@ const emit = defineEmits<{
 void props;
 
 const modeMenuRef = ref<HTMLElement | null>(null);
+/** 目录选择下拉是否展开（最近工作目录 + 添加新项目）。 */
+const showDirMenu = ref(false);
+const dirMenuRef = ref<HTMLElement | null>(null);
+
+const recentProjectsList = computed(() => props.recentProjects ?? []);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
@@ -199,6 +212,28 @@ function onDocumentClick(event: MouseEvent): void {
       emit("update:showModeMenu", false);
     }
   }
+  if (dirMenuRef.value && target && !dirMenuRef.value.contains(target)) {
+    showDirMenu.value = false;
+  }
+}
+
+function toggleDirMenu(): void {
+  if (recentProjectsList.value.length === 0) {
+    // 没有历史目录时直接打开系统选择器（等同"添加新项目"）
+    emit("select-directory");
+    return;
+  }
+  showDirMenu.value = !showDirMenu.value;
+}
+
+function pickRecent(path: string): void {
+  showDirMenu.value = false;
+  emit("select-project", path);
+}
+
+function addNewProject(): void {
+  showDirMenu.value = false;
+  emit("select-directory");
 }
 
 function preventDragDefault(event: Event): void {
@@ -339,15 +374,42 @@ onBeforeUnmount(() => {
       <!-- 底部工具栏 -->
       <div class="toolbar">
         <div class="toolbar-left">
-          <!-- 项目目录选择 -->
-          <button
-            type="button"
-            class="tool-btn"
-            :title="projectDirectory ? '更换输出目录' : '选择输出目录'"
-            @click="emit('select-directory')"
-          >
-            <FolderOpen :size="14" />
-          </button>
+          <!-- 项目目录选择：下拉列出最近打开的工作目录 + 添加新项目 -->
+          <span ref="dirMenuRef" class="dir-anchor">
+            <button
+              type="button"
+              class="tool-btn"
+              :title="projectDirectory ? '切换输出目录' : '选择输出目录'"
+              @click="toggleDirMenu"
+            >
+              <FolderOpen :size="14" />
+            </button>
+            <Transition name="dir-menu">
+              <div v-if="showDirMenu" class="dir-menu">
+                <div class="dir-menu__section">最近打开</div>
+                <button
+                  v-for="item in recentProjectsList"
+                  :key="item"
+                  type="button"
+                  class="dir-menu__item"
+                  :title="item"
+                  @click="pickRecent(item)"
+                >
+                  <FolderOpen :size="13" />
+                  <span class="dir-menu__name">{{ projectDirName(item) }}</span>
+                </button>
+                <div class="dir-menu__divider" />
+                <button
+                  type="button"
+                  class="dir-menu__item dir-menu__item--add"
+                  @click="addNewProject"
+                >
+                  <FolderPlus :size="13" />
+                  <span class="dir-menu__name">添加新项目</span>
+                </button>
+              </div>
+            </Transition>
+          </span>
           <span v-if="projectDirectory" class="dir-chip" :title="projectDirectory">
             {{ projectDisplayName }}
             <button
@@ -360,8 +422,16 @@ onBeforeUnmount(() => {
             </button>
           </span>
 
-          <button type="button" class="tool-btn" title="语音输入">
-            <Mic :size="14" />
+          <button
+            type="button"
+            class="tool-btn tool-btn--ext"
+            :title="props.activeSkillCount ? `扩展（${props.activeSkillCount} 个技能已启用）` : '扩展（工具 / 技能 / MCP）'"
+            @click="emit('toggle-mcp')"
+          >
+            <Blocks :size="14" />
+            <span v-if="props.activeSkillCount" class="tool-btn__badge">
+              {{ props.activeSkillCount > 9 ? "9+" : props.activeSkillCount }}
+            </span>
           </button>
 
           <!-- 参数芯片（与模型选择器同行） -->
@@ -380,13 +450,16 @@ onBeforeUnmount(() => {
             />
           </Transition>
 
-          <!-- 模型选择 -->
+          <!-- 模型选择：图片/视频模式下作为"生成来源"（AI 账号 + API Key 模型） -->
           <ProviderModelSelector
             :credentials="credentials"
             :selected-credential-id="selectedCredentialId"
             :resource-accounts="resourceAccounts"
             :selected-account-id="selectedAccountId"
             :task-type="creationMode === 'video' ? 'video_generation' : 'image_generation'"
+            :source-label="
+              creationMode === 'image' || creationMode === 'video' ? '生成来源' : undefined
+            "
             @select="onSelectCredential"
             @select-account="(id: string) => emit('select-account', id)"
           />
@@ -722,6 +795,29 @@ onBeforeUnmount(() => {
   color: var(--color-text);
 }
 
+/* 扩展按钮：position relative 以承载技能角标 */
+.tool-btn--ext {
+  position: relative;
+}
+
+.tool-btn__badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: grid;
+  place-items: center;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+}
+
 .dir-chip {
   display: inline-flex;
   align-items: center;
@@ -757,6 +853,85 @@ onBeforeUnmount(() => {
 
 .dir-chip__reset:hover {
   background: var(--color-surface-hover);
+}
+
+/* 目录选择下拉：锚定在文件夹按钮上方（composer 位于页面底部） */
+.dir-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.dir-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 6px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-surface, #171c26);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 35%);
+  z-index: 50;
+}
+
+.dir-menu__section {
+  padding: 4px 10px 6px;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.dir-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.dir-menu__item:hover {
+  background: var(--color-surface-hover);
+}
+
+.dir-menu__item--add {
+  color: var(--color-accent);
+}
+
+.dir-menu__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dir-menu__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--color-border-subtle);
+}
+
+.dir-menu-enter-active,
+.dir-menu-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 140ms var(--ease-out, ease);
+}
+
+.dir-menu-enter-from,
+.dir-menu-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 .char-count {

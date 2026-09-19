@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   Film,
   Image as ImageIcon,
+  LoaderCircle,
   Mic,
   Music,
   type Sparkles,
@@ -28,6 +29,13 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import ConversationRail from "../components/ConversationRail.vue";
 import CreativeEmptyState from "../components/CreativeEmptyState.vue";
 import PromptComposer from "../components/PromptComposer.vue";
+import ExtensionPanel from "../components/ExtensionPanel.vue";
+import {
+  buildGenerationHint,
+  buildSystemPromptOverride,
+  loadSelectedSkillIds,
+  saveSelectedSkillIds,
+} from "../skills";
 import ShotWorkspace from "../components/ShotWorkspace.vue";
 import CreativeMemoryPanel from "../components/CreativeMemoryPanel.vue";
 import ModelRouterSelector from "../components/ModelRouterSelector.vue";
@@ -710,15 +718,24 @@ watch(
         try {
           const data = JSON.parse(inv.resultJson);
           let imageUrl = "";
-          const remoteId = data.attempt?.remoteJobId || "";
-          const remoteUrl = remoteId.replace(/^proxy:image:/, "").replace(/^image:/, "");
-          if (remoteUrl && remoteUrl.startsWith("http")) {
-            imageUrl = remoteUrl;
-          } else if (data.localAsset?.filePath) {
-            imageUrl = data.localAsset.filePath;
+          // 工具返回 payload 里直接有 imageUrl（后端已注入）
+          if (data.imageUrl && data.imageUrl.startsWith("http")) {
+            imageUrl = data.imageUrl;
+          } else {
+            const remoteId = data.attempt?.remoteJobId || "";
+            const remoteUrl = remoteId.replace(/^proxy:(image|i2i):/, "");
+            if (remoteUrl && remoteUrl.startsWith("http")) {
+              imageUrl = remoteUrl;
+            } else if (data.localAsset?.filePath) {
+              imageUrl = data.localAsset.filePath;
+            }
           }
 
           if (imageUrl && nodeId) {
+            // 把生成结果图片 URL 写入节点 payload（CanvasNodeCard 渲染用）
+            memoryCanvasRef.value
+              ?.setNodeImageUrl(nodeId, imageUrl)
+              .catch((e) => console.warn(String(e)));
             // 连线到最近的上传节点（用户上传的参考图）
             const uploadNodes = memoryCanvasRef.value?.findRecentNodesByType("upload") || [];
             for (const uploadNode of uploadNodes.slice(-3)) {
@@ -777,6 +794,9 @@ function onDocumentClick(event: MouseEvent): void {
 
 /* ── 悬浮 Composer：实测高度，为对话流预留底部空间 ── */
 const composerEl = ref<InstanceType<typeof PromptComposer> | null>(null);
+const showExtensionPanel = ref(false);
+const selectedSkillIds = ref<string[]>(loadSelectedSkillIds());
+watch(selectedSkillIds, (ids) => saveSelectedSkillIds(ids), { deep: true });
 const conversationEl = ref<HTMLElement | null>(null);
 let composerResizeObserver: ResizeObserver | null = null;
 
@@ -848,6 +868,7 @@ function scrollToBottom(): void {
 
 function pickCredential(id: string): void {
   selectedCredentialId.value = id;
+  selectedAccountId.value = ""; // 凭据与账号互斥，直接生成模式凭据优先
   modelMenuOpen.value = false;
 }
 
@@ -968,7 +989,8 @@ async function send(): Promise<void> {
   sendError.value = null;
 
   if (isAgentMode.value && credential) {
-    await sendAgentMessage(prompt, credential);
+    const skillOverride = buildSystemPromptOverride(selectedSkillIds.value, projectDir.projectMemory);
+    await sendAgentMessage(prompt, credential, skillOverride);
     return;
   }
 
@@ -1048,7 +1070,11 @@ function buildAttachments(): AttachmentInput[] | undefined {
  * 后续发送复用当前会话。事件流通过 useAgentConversation 实时刷新 UI。
  * 失败时保留 promptText 以便重试。
  */
-async function sendAgentMessage(prompt: string, credential: CredentialRecord): Promise<void> {
+async function sendAgentMessage(
+  prompt: string,
+  credential: CredentialRecord,
+  skillOverride?: string,
+): Promise<void> {
   try {
     // 当切换了凭据（与当前对话绑定的不同）时，自动新建对话
     if (agentConversation.value && agentConversation.value.credentialId !== credential.id) {
@@ -1075,7 +1101,7 @@ async function sendAgentMessage(prompt: string, credential: CredentialRecord): P
       await router.replace({ path: "/generations", query: { conversation: conversation.id } });
       window.dispatchEvent(new CustomEvent("aigc-agent-conversations-updated"));
     }
-    await agent.sendMessage(prompt, buildAttachments());
+    await agent.sendMessage(prompt, buildAttachments(), skillOverride);
     console.log(
       "[Canvas] sendMessage completed, error:",
       agent.errorMessage.value,
@@ -1211,6 +1237,10 @@ async function handleGenerate(shotId: string, prompt: string): Promise<void> {
 
 function buildEnrichedPrompt(base: string): string {
   const parts: string[] = [`[${currentMode.value.label}]`, base];
+  const generationHint = buildGenerationHint(selectedSkillIds.value);
+  if (generationHint) {
+    parts.push(generationHint);
+  }
   if (creationMode.value === "image" || creationMode.value === "video") {
     parts.push(`比例:${aspectRatio.value}`);
   }
@@ -1314,6 +1344,7 @@ function formatTime(iso: string): string {
         :project-directory="projectDir.selectedPath"
         :project-display-name="projectDir.displayName"
         :reference-images="referenceImages"
+        :recent-projects="projectDir.recentDirs"
         @pick="applyExamplePrompt"
         @configure-credentials="navigateToCredentials"
         @update:prompt-text="promptText = $event"
@@ -1330,7 +1361,9 @@ function formatTime(iso: string): string {
         @drop-files="addReferenceFiles($event)"
         @remove-reference="referenceImages.splice($event, 1)"
         @select-directory="projectDir.selectDirectory()"
+        @select-project="projectDir.selectRecent($event)"
         @reset-directory="projectDir.resetToDefault()"
+        @toggle-mcp="showExtensionPanel = !showExtensionPanel"
       />
     </div>
 
@@ -1483,6 +1516,8 @@ function formatTime(iso: string): string {
         :show-preferences="showPreferences"
         :project-directory="projectDir.selectedPath"
         :project-display-name="projectDir.displayName"
+        :active-skill-count="selectedSkillIds.length"
+        :recent-projects="projectDir.recentDirs"
         @update:creation-mode="creationMode = $event as CreationMode"
         @send="send"
         @remove-reference="removeReferenceImage"
@@ -1497,9 +1532,18 @@ function formatTime(iso: string): string {
         @start-new-agent-conversation="startNewAgentConversation"
         @toggle-preferences="showPreferences = !showPreferences"
         @select-directory="projectDir.selectDirectory()"
+        @select-project="projectDir.selectRecent($event)"
         @reset-directory="projectDir.resetToDefault()"
+        @toggle-mcp="showExtensionPanel = !showExtensionPanel"
       />
     </div>
+
+    <!-- 扩展面板（工具/技能/MCP）：置于页面根层，两种布局下均可唤起 -->
+    <ExtensionPanel
+      v-model="selectedSkillIds"
+      :visible="showExtensionPanel"
+      @close="showExtensionPanel = false"
+    />
   </div>
 </template>
 

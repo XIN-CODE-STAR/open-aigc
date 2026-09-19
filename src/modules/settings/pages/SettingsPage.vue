@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import type { Component } from "vue";
 import {
   AlignJustify,
@@ -35,6 +35,10 @@ interface SegmentedOption<T extends string> {
 
 const preferences = usePreferencesStore();
 const projectDir = useProjectDirectory();
+
+onMounted(() => {
+  projectDir.restore();
+});
 
 const themeOptions: SegmentedOption<ThemePreference>[] = [
   { value: "system", label: "跟随系统", icon: Monitor },
@@ -265,7 +269,11 @@ function onMaxTokensInput(event: Event): void {
     <section class="settings-section" aria-labelledby="output-dir-title">
       <div class="setting-copy">
         <h2 id="output-dir-title">默认输出目录</h2>
-        <p>图片、视频等生成产物的保存位置。可在创意工坊中按会话单独修改。</p>
+        <p>
+          选择后，生成的图片/视频会导出到该目录下的
+          <code>generated/&lt;对话标题或日期&gt;/</code>
+          。未选择时写入应用默认工作区（资源库仍可查看）。
+        </p>
       </div>
       <div class="dir-display">
         <span class="dir-path" :title="projectDir.selectedPath ?? '默认工作区'">

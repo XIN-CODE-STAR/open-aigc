@@ -300,10 +300,10 @@ const nonMediaAssets = computed(() =>
   assets.value.filter((a) => a.assetKind !== "image" && a.assetKind !== "video"),
 );
 
-/** 将资产的 relativePath 转为本地文件 URL */
+/** 将资产的 relativePath 转为本地文件 URL（asset 协议直读磁盘，最快路径） */
 function getAssetSrc(asset: { relativePath: string }): string {
-  // relativePath: "assets/xxx.png" → 完整路径: workspace/managed-files/assets/xxx.png
   const workspaceDir = managedFilesDir.value;
+  if (!workspaceDir) return "";
   const filePath = `${workspaceDir}\\${asset.relativePath.replace(/\//g, "\\")}`;
   try {
     return convertFileSrc(filePath);

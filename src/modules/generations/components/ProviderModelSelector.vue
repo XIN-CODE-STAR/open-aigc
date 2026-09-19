@@ -27,8 +27,10 @@ const props = defineProps<{
   resourceAccounts?: ResourceAccountRecord[];
   /** 当前选中的资源账号 id。 */
   selectedAccountId?: string | null;
-  /** 当前创作模式（用于过滤模型）。 */
+  /** 当前创作模式（区分对话选择与图片/视频生成来源）。 */
   taskType?: "image_generation" | "video_generation";
+  /** 生成来源标识（图片/视频模式下显示在按钮前，如「生成来源」）。 */
+  sourceLabel?: string;
   disabled?: boolean;
   showStatusIndicator?: boolean;
 }>();
@@ -46,17 +48,11 @@ const hasAnySource = computed(
   () => (filteredCredentials.value?.length ?? 0) > 0 || (filteredAccounts.value?.length ?? 0) > 0,
 );
 
-/** 根据 taskType 过滤 API 凭据。 */
-const filteredCredentials = computed(() => {
-  const creds = props.credentials ?? [];
-  if (!props.taskType) return creds;
-  if (props.taskType === "video_generation") {
-    // 视频模式：只显示包含 "video" 或 "seedance" 的模型
-    return creds.filter((c) => /video|seedance/i.test(c.modelName));
-  }
-  // 图片模式：排除纯视频模型
-  return creds.filter((c) => !/video|seedance/i.test(c.modelName));
-});
+/**
+ * API 凭据列表：展示全部已配置凭据，不按模型名过滤。
+ * 多模态大模型（如 qwen-vl、grok）同样可以生成图片，名称过滤会误伤。
+ */
+const filteredCredentials = computed(() => props.credentials ?? []);
 
 /** 根据 taskType 过滤资源账号。jimeng 同时支持图片和视频。 */
 const filteredAccounts = computed(() => {
@@ -191,6 +187,7 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
       @click="toggleMenu"
     >
       <Sparkles :size="11" />
+      <span v-if="sourceLabel" class="model-btn-source">{{ sourceLabel }}</span>
       <span class="model-btn-label">
         <template v-if="selectedDisplay">
           <span class="model-btn-name">{{ selectedDisplay.name }}</span>
@@ -221,7 +218,7 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
       <div v-if="modelMenuOpen && hasAnySource" class="model-pop" role="listbox">
         <!-- API 凭据分组 -->
         <template v-if="filteredCredentials.length > 0">
-          <div class="model-pop-group-label">API 模型</div>
+          <div class="model-pop-group-label">API Key 模型（多模态可生成）</div>
           <button
             v-for="cred in filteredCredentials"
             :key="cred.id"
@@ -267,7 +264,7 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
 
         <!-- 资源账号分组（jimeng 等） -->
         <template v-if="filteredAccounts.length > 0">
-          <div class="model-pop-group-label">AI 账号</div>
+          <div class="model-pop-group-label">AI 账号（平台直连）</div>
           <button
             v-for="acc in filteredAccounts"
             :key="acc.id"
@@ -354,6 +351,17 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
   gap: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 生成来源标识：与模型名之间的浅色前缀 */
+.model-btn-source {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--color-accent-soft, rgb(99 102 241 / 12%));
+  color: var(--color-accent);
+  font-size: 10px;
+  font-weight: 500;
   white-space: nowrap;
 }
 
