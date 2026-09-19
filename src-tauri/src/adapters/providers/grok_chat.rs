@@ -480,6 +480,16 @@ struct StreamFunctionDelta {
 }
 
 // 工具定义序列化测试用例。
+/// 判断 URL 最后一段是否为版本段（v + 纯数字，忽略大小写）。
+fn ends_with_version_segment(url: &str) -> bool {
+    let last = url.rsplit('/').next().unwrap_or("");
+    let rest = last.strip_prefix('v').or_else(|| last.strip_prefix('V'));
+    match rest {
+        Some(digits) => !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()),
+        None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -647,15 +657,5 @@ mod tests {
         assert!(!ends_with_version_segment("https://x.com/api/video"));
         assert!(!ends_with_version_segment("https://x.com/api/v"));
         assert!(!ends_with_version_segment("https://x.com/api"));
-    }
-}
-
-/// 判断 URL 最后一段是否为版本段（v + 纯数字，忽略大小写）。
-fn ends_with_version_segment(url: &str) -> bool {
-    let last = url.rsplit('/').next().unwrap_or("");
-    let rest = last.strip_prefix('v').or_else(|| last.strip_prefix('V'));
-    match rest {
-        Some(digits) => !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()),
-        None => false,
     }
 }
