@@ -97,12 +97,35 @@ impl ExecutionSkillRegistry {
     /// - ffmpeg 可用 → 注册真实 CompositeSkill（FfmpegCompositionFacade）
     /// - ffmpeg 不可用 → 保持 MockCompositeSkill，输出明确日志
     pub fn with_facade(facade: Arc<dyn GenerationFacade>) -> Self {
+        Self::with_facade_and_composite(facade, false)
+    }
+
+    /// 测试专用：真实 Image/Video Facade + 强制 MockCompositeSkill。
+    ///
+    /// 真实 CompositeSkill 会过滤 Mock 来源的产物，在装有 ffmpeg 的环境
+    /// （包括 tauri-build 把 sidecar 拷进 target/debug 后、被 cargo test
+    /// 注入测试进程 PATH 而命中的场景）会让 mock 产物驱动的流水线退化为
+    /// Partial。验证执行器编排的测试不关心真实合成，需钉住 Mock 保证确定性。
+    #[cfg(test)]
+    pub fn with_facade_mock_composite(facade: Arc<dyn GenerationFacade>) -> Self {
+        Self::with_facade_and_composite(facade, true)
+    }
+
+    fn with_facade_and_composite(
+        facade: Arc<dyn GenerationFacade>,
+        force_mock_composite: bool,
+    ) -> Self {
         let mut registry = Self::new();
         registry.register(ImageGenerationSkill::new(Arc::clone(&facade)));
         registry.register(VideoGenerationSkill::new(Arc::clone(&facade)));
 
         // Composite: 条件注册
-        if let Some(ffmpeg_path) = super::composite_skill::detect_ffmpeg() {
+        let ffmpeg_path = if force_mock_composite {
+            None
+        } else {
+            super::composite_skill::detect_ffmpeg()
+        };
+        if let Some(ffmpeg_path) = ffmpeg_path {
             eprintln!("[SkillRegistry] CompositeSkill: engine=ffmpeg, path={ffmpeg_path}");
             // workspace_root 在真实环境中应从配置注入；当前使用默认路径
             let workspace_root =
@@ -115,10 +138,14 @@ impl ExecutionSkillRegistry {
                 workspace_root,
             ));
         } else {
-            eprintln!(
-                "[SkillRegistry] CompositeSkill unavailable: \
-                 reason=ffmpeg_not_found, fallback=MockCompositeSkill"
-            );
+            if force_mock_composite {
+                eprintln!("[SkillRegistry] CompositeSkill: forced mock (test)");
+            } else {
+                eprintln!(
+                    "[SkillRegistry] CompositeSkill unavailable: \
+                     reason=ffmpeg_not_found, fallback=MockCompositeSkill"
+                );
+            }
             registry.register(MockCompositeSkill);
         }
 
@@ -471,6 +498,19 @@ impl SequentialExecutor {
         }
     }
 
+    /// 测试专用：真实 Image/Video Facade + 强制 MockCompositeSkill。
+    ///
+    /// 理由见 [`ExecutionSkillRegistry::with_facade_mock_composite`]：
+    /// mock 产物会被真实 CompositeSkill 过滤，装有 ffmpeg 的环境下
+    /// 以 mock 产物驱动的编排测试会退化为 Partial，需钉住 Mock 合成。
+    #[cfg(test)]
+    pub fn with_facade_mock_composite(facade: Arc<dyn GenerationFacade>) -> Self {
+        Self {
+            registry: ExecutionSkillRegistry::with_facade_mock_composite(facade),
+            persistence: None,
+        }
+    }
+
     /// 发射持久化事件。失败时仅 log，不阻断执行。
     fn emit_event(&self, event: ExecutionPersistenceEvent) {
         if let Some(repo) = &self.persistence {
@@ -673,7 +713,8 @@ mod tests {
     #[test]
     fn test_sequential_executor_with_facade() {
         let facade: Arc<dyn GenerationFacade> = Arc::new(MockGenerationFacade);
-        let executor = SequentialExecutor::with_facade(facade);
+        // mock 产物会被真实 CompositeSkill 过滤，此处只验证执行器编排，钉住 Mock 合成
+        let executor = SequentialExecutor::with_facade_mock_composite(facade);
         let plan = sample_execution_plan();
 
         let result = executor.execute(&plan, "plan-facade".to_owned(), "ws-1".to_owned());
@@ -757,9 +798,9 @@ mod tests {
         // style + 2 shots + composite = 4 steps
         assert_eq!(exec_plan.steps.len(), 4);
 
-        // 3. Executor with Facade
+        // 3. Executor with Facade（mock 产物会被真实 CompositeSkill 过滤，钉住 Mock 合成）
         let facade: Arc<dyn GenerationFacade> = Arc::new(MockGenerationFacade);
-        let executor = SequentialExecutor::with_facade(facade);
+        let executor = SequentialExecutor::with_facade_mock_composite(facade);
 
         // 4. Execute
         let result = executor.execute(
