@@ -1893,6 +1893,65 @@ mod tests {
         assert_eq!(payload["syncedToMemory"], serde_json::json!(true));
     }
 
+    /// 手动端到端验证：对真实工作区数据跑完整记忆检索管线。
+    /// 运行：cargo test --lib manual_real_workspace_memory -- --ignored --nocapture
+    #[test]
+    #[ignore = "manual e2e against real workspace"]
+    fn manual_real_workspace_memory() {
+        let workspace = std::path::PathBuf::from(std::env::var("USERPROFILE").unwrap())
+            .join("AppData")
+            .join("Local")
+            .join("com.aigcstudio.desktop")
+            .join("workspace");
+        // 找有节点数据的画布对应的对话（跳过空画布）
+        let connection =
+            rusqlite::Connection::open(workspace.join(DB_FILE)).expect("open workspace db");
+        let conversations: Vec<String> = {
+            let mut statement = connection
+                .prepare(
+                    "SELECT c.name FROM memory_canvases c
+                     WHERE (SELECT COUNT(*) FROM memory_nodes n WHERE n.canvas_id = c.id AND n.deleted_at IS NULL) > 0
+                     ORDER BY c.updated_at DESC LIMIT 3",
+                )
+                .expect("prepare");
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .expect("query");
+            rows.flatten()
+                .map(|name| name.trim_start_matches("conv-").to_owned())
+                .collect()
+        };
+        eprintln!("conversations with data: {:?}", conversations.len());
+        for conversation_id in &conversations {
+            eprintln!("=== conversation {conversation_id} ===");
+            // 概览模式
+            match load_working_memory_context(&workspace, conversation_id, None, 24) {
+                Some(ctx) => eprintln!(
+                    "[overview {} chars]
+{}",
+                    ctx.chars().count(),
+                    &truncate_chars(&ctx, 600)
+                ),
+                None => eprintln!("[overview: empty]"),
+            }
+            // 检索模式（真实查询语义）
+            match load_working_memory_context(
+                &workspace,
+                conversation_id,
+                Some("生成一张海报 参考图片风格"),
+                6,
+            ) {
+                Some(ctx) => eprintln!(
+                    "[retrieval {} chars]
+{}",
+                    ctx.chars().count(),
+                    &truncate_chars(&ctx, 600)
+                ),
+                None => eprintln!("[retrieval: no match]"),
+            }
+        }
+    }
+
     #[test]
     fn context_is_capped_at_max_chars() {
         let dir = tempfile::tempdir().unwrap();
