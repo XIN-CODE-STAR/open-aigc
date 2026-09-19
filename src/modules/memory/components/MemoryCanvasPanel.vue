@@ -792,174 +792,173 @@ defineExpose({
         >
       </div>
 
-      <!-- 画布舞台 -->
-      <div class="canvas-stage">
-        <!-- Vue Flow Canvas -->
-        <VueFlow
-          class="memory-canvas"
-          :class="`memory-canvas--tool-${canvasTool}`"
-          :nodes="flowNodes"
-          :edges="flowEdges as any"
-          :default-edge-options="{ type: 'default', animated: true }"
-          :snap-to-grid="true"
-          :snap-grid="[20, 20]"
-          :min-zoom="0.2"
-          :max-zoom="3"
-          :default-viewport="{ zoom: 0.8, x: 0, y: 0 }"
-          :edges-updatable="true"
-          :connection-line-style="{ stroke: '#818cf8', strokeWidth: 2, strokeDasharray: '6 4' }"
-          :connection-radius="30"
-          :elevate-nodes-on-select="true"
-          :only-render-visible-elements="nodes.length > 40"
-          :delete-key-code="['Backspace', 'Delete']"
-          @pane-click="onPaneClick"
-          @pane-double-click="onPaneDblClick"
-        >
-          <template #node-canvasCard="nodeProps">
-            <CanvasNodeCard v-bind="nodeProps" />
-          </template>
+      <!-- 画布（topbar/dock 以 panel 为锚） -->
+      <!-- Vue Flow Canvas -->
+      <VueFlow
+        class="memory-canvas"
+        :class="`memory-canvas--tool-${canvasTool}`"
+        :nodes="flowNodes"
+        :edges="flowEdges as any"
+        :default-edge-options="{ type: 'default', animated: true }"
+        :snap-to-grid="true"
+        :snap-grid="[20, 20]"
+        :min-zoom="0.2"
+        :max-zoom="3"
+        :default-viewport="{ zoom: 0.8, x: 0, y: 0 }"
+        :edges-updatable="true"
+        :zoom-on-scroll="true"
+        :zoom-on-pinch="true"
+        :pan-on-scroll="false"
+        :connection-line-style="{ stroke: '#818cf8', strokeWidth: 2, strokeDasharray: '6 4' }"
+        :connection-radius="30"
+        :elevate-nodes-on-select="true"
+        :only-render-visible-elements="nodes.length > 40"
+        :delete-key-code="['Backspace', 'Delete']"
+        @pane-click="onPaneClick"
+        @pane-double-click="onPaneDblClick"
+      >
+        <template #node-canvasCard="nodeProps">
+          <CanvasNodeCard v-bind="nodeProps" />
+        </template>
 
-          <Background
-            v-if="gridMode !== 'none'"
-            :variant="gridMode"
-            :pattern-color="
-              gridMode === 'dots' ? 'rgba(148, 163, 248, 0.14)' : 'rgba(148, 163, 248, 0.16)'
-            "
-            :gap="gridMode === 'lines' ? 28 : 20"
-            :size="1"
-          />
-          <Controls position="bottom-right" />
+        <Background
+          v-if="gridMode !== 'none'"
+          :variant="gridMode"
+          :pattern-color="
+            gridMode === 'dots' ? 'rgba(148, 163, 248, 0.14)' : 'rgba(148, 163, 248, 0.16)'
+          "
+          :gap="gridMode === 'lines' ? 28 : 20"
+          :size="1"
+        />
+        <Controls position="bottom-right" />
 
-          <!-- 空白处右键菜单（统一组件） -->
-          <CanvasContextMenu
-            v-if="canvasMenu"
-            :x="canvasMenu.x"
-            :y="canvasMenu.y"
-            :items="paneMenuItems"
-            @select="onPaneMenuSelect"
-            @close="canvasMenu = null"
-          />
+        <!-- 空白处右键菜单（统一组件） -->
+        <CanvasContextMenu
+          v-if="canvasMenu"
+          :x="canvasMenu.x"
+          :y="canvasMenu.y"
+          :items="paneMenuItems"
+          @select="onPaneMenuSelect"
+          @close="canvasMenu = null"
+        />
 
-          <!-- 节点右键菜单（统一组件） -->
-          <CanvasContextMenu
-            v-if="nodeMenu"
-            :x="nodeMenu.x"
-            :y="nodeMenu.y"
-            :items="nodeMenuItems"
-            @select="onNodeMenuSelect"
-            @close="nodeMenu = null"
-          />
+        <!-- 节点右键菜单（统一组件） -->
+        <CanvasContextMenu
+          v-if="nodeMenu"
+          :x="nodeMenu.x"
+          :y="nodeMenu.y"
+          :items="nodeMenuItems"
+          @select="onNodeMenuSelect"
+          @close="nodeMenu = null"
+        />
 
-          <!-- 快捷键帮助 -->
-          <teleport to="body">
-            <div v-if="helpOpen" class="canvas-help-backdrop" @click="helpOpen = false">
-              <div class="canvas-help" @click.stop>
-                <div class="canvas-help__title">画布快捷键与操作</div>
+        <!-- 快捷键帮助 -->
+        <teleport to="body">
+          <div v-if="helpOpen" class="canvas-help-backdrop" @click="helpOpen = false">
+            <div class="canvas-help" @click.stop>
+              <div class="canvas-help__title">画布快捷键与操作</div>
 
-                <div class="canvas-help__section">工具模式</div>
-                <div class="canvas-help__row">
-                  <span>V / N / I</span><span>切换 选择 / 便签 / 图片 模式</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>Esc</span><span>回到选择模式 / 关闭菜单和弹窗</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>便签模式</span><span>点击空白处创建便签（可连续创建）</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>图片模式</span><span>点击空白处打开文件选择器</span>
-                </div>
-
-                <div class="canvas-help__section">节点操作</div>
-                <div class="canvas-help__row">
-                  <span>拖拽节点</span><span>调整位置（自动保存）</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>节点右下角手柄</span><span>拖拽调整节点大小（自动保存）</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>双击便签</span><span>编辑内容（Enter 保存 / Esc 取消）</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>右键节点</span><span>编辑 / 复制 / 换色 / 查看大图 / 下载 / 删除</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>拖拽节点边缘圆点</span><span>连线到目标节点（可拖动端点重连）</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>连线拖到空白处</span><span>原地创建便签并自动连线</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>双击连线</span><span>删除连线（有提示，可撤销）</span>
-                </div>
-
-                <div class="canvas-help__section">选择与剪贴板</div>
-                <div class="canvas-help__row">
-                  <span>Shift + 拖拽</span><span>框选多个节点</span>
-                </div>
-                <div class="canvas-help__row"><span>Ctrl+A</span><span>全选节点和连线</span></div>
-                <div class="canvas-help__row">
-                  <span>Ctrl+C / Ctrl+V</span><span>复制 / 粘贴选中的节点</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>Ctrl+V</span><span>粘贴剪贴板图片到画布</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>Delete / Backspace</span><span>删除选中的节点/连线</span>
-                </div>
-
-                <div class="canvas-help__section">画布</div>
-                <div class="canvas-help__row">
-                  <span>右键空白处</span><span>新建便签 / 导入图片 / 全选 / 粘贴节点</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>双击空白处</span><span>在该位置新建便签</span>
-                </div>
-                <div class="canvas-help__row">
-                  <span>Ctrl+Z / Ctrl+Shift+Z</span><span>撤销 / 重做</span>
-                </div>
-                <button class="canvas-help__close" type="button" @click="helpOpen = false">
-                  知道了
-                </button>
+              <div class="canvas-help__section">工具模式</div>
+              <div class="canvas-help__row">
+                <span>V / N / I</span><span>切换 选择 / 便签 / 图片 模式</span>
               </div>
-            </div>
-          </teleport>
+              <div class="canvas-help__row">
+                <span>Esc</span><span>回到选择模式 / 关闭菜单和弹窗</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>便签模式</span><span>点击空白处创建便签（可连续创建）</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>图片模式</span><span>点击空白处打开文件选择器</span>
+              </div>
 
-          <!-- 图片大图预览 -->
-          <teleport to="body">
-            <div v-if="lightboxUrl" class="canvas-lightbox" @click="lightboxUrl = null">
-              <img :src="lightboxUrl" alt="预览" />
-            </div>
-          </teleport>
+              <div class="canvas-help__section">节点操作</div>
+              <div class="canvas-help__row">
+                <span>拖拽节点</span><span>调整位置（自动保存）</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>节点右下角手柄</span><span>拖拽调整节点大小（自动保存）</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>双击便签</span><span>编辑内容（Enter 保存 / Esc 取消）</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>右键节点</span><span>编辑 / 复制 / 换色 / 查看大图 / 下载 / 删除</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>拖拽节点边缘圆点</span><span>连线到目标节点（可拖动端点重连）</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>连线拖到空白处</span><span>原地创建便签并自动连线</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>双击连线</span><span>删除连线（有提示，可撤销）</span>
+              </div>
 
-          <MiniMap
-            v-if="minimapVisible"
-            position="bottom-left"
-            :pannable="true"
-            :zoomable="true"
-            :node-color="(n: any) => getNodeColor(n.data?.nodeType)"
-            :mask-color="'rgb(15, 20, 30, 0.7)'"
-            class="canvas-minimap"
-          />
-          <button
-            v-if="minimapVisible"
-            class="minimap-btn minimap-btn--hide"
-            type="button"
-            title="隐藏小地图"
-            @click="toggleMinimap"
-          >
-            <EyeOff :size="12" />
-          </button>
-          <button
-            v-else
-            class="minimap-btn minimap-btn--show"
-            type="button"
-            title="显示小地图"
-            @click="toggleMinimap"
-          >
-            <Map :size="13" />
-          </button>
-        </VueFlow>
+              <div class="canvas-help__section">选择与剪贴板</div>
+              <div class="canvas-help__row"><span>Shift + 拖拽</span><span>框选多个节点</span></div>
+              <div class="canvas-help__row"><span>Ctrl+A</span><span>全选节点和连线</span></div>
+              <div class="canvas-help__row">
+                <span>Ctrl+C / Ctrl+V</span><span>复制 / 粘贴选中的节点</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>Ctrl+V</span><span>粘贴剪贴板图片到画布</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>Delete / Backspace</span><span>删除选中的节点/连线</span>
+              </div>
+
+              <div class="canvas-help__section">画布</div>
+              <div class="canvas-help__row">
+                <span>右键空白处</span><span>新建便签 / 导入图片 / 全选 / 粘贴节点</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>双击空白处</span><span>在该位置新建便签</span>
+              </div>
+              <div class="canvas-help__row">
+                <span>Ctrl+Z / Ctrl+Shift+Z</span><span>撤销 / 重做</span>
+              </div>
+              <button class="canvas-help__close" type="button" @click="helpOpen = false">
+                知道了
+              </button>
+            </div>
+          </div>
+        </teleport>
+
+        <!-- 图片大图预览 -->
+        <teleport to="body">
+          <div v-if="lightboxUrl" class="canvas-lightbox" @click="lightboxUrl = null">
+            <img :src="lightboxUrl" alt="预览" />
+          </div>
+        </teleport>
+
+        <MiniMap
+          v-if="minimapVisible"
+          position="bottom-left"
+          :pannable="true"
+          :zoomable="true"
+          :node-color="(n: any) => getNodeColor(n.data?.nodeType)"
+          :mask-color="'rgb(15, 20, 30, 0.7)'"
+          class="canvas-minimap"
+        />
+        <button
+          v-if="minimapVisible"
+          class="minimap-btn minimap-btn--hide"
+          type="button"
+          title="隐藏小地图"
+          @click="toggleMinimap"
+        >
+          <EyeOff :size="12" />
+        </button>
+        <button
+          v-else
+          class="minimap-btn minimap-btn--show"
+          type="button"
+          title="显示小地图"
+          @click="toggleMinimap"
+        >
+          <Map :size="13" />
+        </button>
 
         <!-- 顶部悬浮条（玻璃拟态） -->
         <header class="canvas-topbar">
@@ -1088,7 +1087,7 @@ defineExpose({
             <Trash2 :size="16" />
           </button>
         </div>
-      </div>
+      </VueFlow>
     </aside>
   </Transition>
 </template>
@@ -1424,13 +1423,6 @@ function getNodeColor(type: string | undefined): string {
   transform: translateY(8px);
 }
 
-/* ── 画布舞台：满铺，悬浮控件锚定于此 ── */
-.canvas-stage {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-}
-
 /* 顶部悬浮条（玻璃拟态） */
 .canvas-topbar {
   position: absolute;
@@ -1571,8 +1563,9 @@ function getNodeColor(type: string | undefined): string {
 }
 
 .memory-canvas {
-  position: absolute;
-  inset: 0;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
   /* 径向深度渐变：中心微亮，边缘沉下去 */
   background: radial-gradient(1100px 720px at 50% 38%, #151c30 0%, #0d1220 55%, #0a0e19 100%);
 }
