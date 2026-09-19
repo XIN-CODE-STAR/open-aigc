@@ -425,7 +425,11 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="tool-btn tool-btn--ext"
-            :title="props.activeSkillCount ? `扩展（${props.activeSkillCount} 个技能已启用）` : '扩展（工具 / 技能 / MCP）'"
+            :title="
+              props.activeSkillCount
+                ? `扩展（${props.activeSkillCount} 个技能已启用）`
+                : '扩展（工具 / 技能 / MCP）'
+            "
             @click="emit('toggle-mcp')"
           >
             <Blocks :size="14" />

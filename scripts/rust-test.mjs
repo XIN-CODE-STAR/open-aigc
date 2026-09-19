@@ -120,18 +120,11 @@ function main() {
   // 无参数时保持默认行为不变（走常规门禁）。
   const extraArgs = process.argv.slice(2);
   if (extraArgs[0] === "--") extraArgs.shift();
-  const testArgs = [
-    "cargo",
-    "test",
-    "--manifest-path",
-    join("src-tauri", "Cargo.toml"),
-  ];
+  const testArgs = ["cargo", "test", "--manifest-path", join("src-tauri", "Cargo.toml")];
   if (extraArgs.length > 0) {
     testArgs.push("--", ...extraArgs);
   }
-  process.exit(
-    run("node", [join(scriptDir, "run-with-rust-path.mjs"), ...testArgs]),
-  );
+  process.exit(run("node", [join(scriptDir, "run-with-rust-path.mjs"), ...testArgs]));
 }
 
 main();

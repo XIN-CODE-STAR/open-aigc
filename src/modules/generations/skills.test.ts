@@ -29,10 +29,7 @@ describe("skills", () => {
   });
 
   it("buildSkillOverride 多技能按声明顺序合并", () => {
-    const override = buildSkillOverride([
-      "storyboard-director",
-      "pro-photographer",
-    ]);
+    const override = buildSkillOverride(["storyboard-director", "pro-photographer"]);
     expect(override).toContain("专业摄影师");
     expect(override).toContain("分镜导演");
   });

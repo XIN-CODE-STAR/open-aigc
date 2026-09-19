@@ -69,8 +69,7 @@ function ffmpegHealthy(path) {
 /** 经 curl 下载。Node fetch（undici）不读 HTTP(S)_PROXY 环境变量，
  * 而本机网络依赖本地代理；curl 会遵循代理环境变量，故作为首选下载器。 */
 function downloadViaCurl(url, destPath) {
-  const exe =
-    process.platform === "win32" ? "C:\\Windows\\System32\\curl.exe" : "curl";
+  const exe = process.platform === "win32" ? "C:\\Windows\\System32\\curl.exe" : "curl";
   if (process.platform === "win32" && !existsSync(exe)) return false;
   const run = spawnSync(exe, ["-fSL", "--retry", "3", "-o", destPath, url], {
     stdio: "inherit",

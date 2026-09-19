@@ -123,7 +123,9 @@ function checkRustChannels() {
   mark(
     result.status === 0,
     "kling/seedance",
-    result.status === 0 ? "冒烟测试通过（缺失凭据的通道已自动跳过）" : `cargo test 退出码 ${result.status}`,
+    result.status === 0
+      ? "冒烟测试通过（缺失凭据的通道已自动跳过）"
+      : `cargo test 退出码 ${result.status}`,
   );
 }
 

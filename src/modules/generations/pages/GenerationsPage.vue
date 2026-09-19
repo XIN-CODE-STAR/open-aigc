@@ -989,7 +989,10 @@ async function send(): Promise<void> {
   sendError.value = null;
 
   if (isAgentMode.value && credential) {
-    const skillOverride = buildSystemPromptOverride(selectedSkillIds.value, projectDir.projectMemory);
+    const skillOverride = buildSystemPromptOverride(
+      selectedSkillIds.value,
+      projectDir.projectMemory,
+    );
     await sendAgentMessage(prompt, credential, skillOverride);
     return;
   }

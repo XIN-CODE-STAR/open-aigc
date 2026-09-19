@@ -61,9 +61,7 @@ export function loadSelectedSkillIds(): string[] {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const known = new Set(EXTENSION_SKILLS.map((s) => s.id));
-    return parsed.filter(
-      (v): v is string => typeof v === "string" && known.has(v),
-    );
+    return parsed.filter((v): v is string => typeof v === "string" && known.has(v));
   } catch {
     return [];
   }

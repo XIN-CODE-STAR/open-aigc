@@ -46,9 +46,7 @@ function toggleSkill(id: string): void {
   }
 }
 
-const mcpServers = ref([
-  { name: "内置工具", status: "connected", count: builtinTools.length },
-]);
+const mcpServers = ref([{ name: "内置工具", status: "connected", count: builtinTools.length }]);
 </script>
 
 <template>
@@ -98,7 +96,12 @@ const mcpServers = ref([
       <!-- Skills Tab -->
       <div v-if="activeTab === 'skills'" class="ext-body">
         <p class="ext-hint">选中的技能会注入 Agent 的行为提示词，影响分析和生成风格。</p>
-        <div v-for="skill in SKILLS" :key="skill.id" class="ext-item ext-item--clickable" @click="toggleSkill(skill.id)">
+        <div
+          v-for="skill in SKILLS"
+          :key="skill.id"
+          class="ext-item ext-item--clickable"
+          @click="toggleSkill(skill.id)"
+        >
           <div class="ext-item__icon"><Sparkles :size="13" /></div>
           <div class="ext-item__info">
             <span class="ext-item__name">{{ skill.name }}</span>
@@ -157,7 +160,10 @@ const mcpServers = ref([
   border-bottom: 1px solid var(--color-border-subtle);
   flex-shrink: 0;
 }
-.ext-header__icon { color: var(--color-accent); display: flex; }
+.ext-header__icon {
+  color: var(--color-accent);
+  display: flex;
+}
 .ext-header__title {
   flex: 1;
   color: var(--color-text);
@@ -175,7 +181,10 @@ const mcpServers = ref([
   background: transparent;
   cursor: pointer;
 }
-.ext-close:hover { color: var(--color-text); background: var(--color-surface-hover); }
+.ext-close:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
 
 .ext-tabs {
   display: flex;
@@ -197,7 +206,9 @@ const mcpServers = ref([
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
 .ext-tab--active {
   color: var(--color-accent);
@@ -226,11 +237,28 @@ const mcpServers = ref([
   background: var(--color-surface-subtle, rgb(255 255 255 / 2%));
   transition: border-color var(--duration-fast) var(--ease-out);
 }
-.ext-item + .ext-item { margin-top: var(--space-2); }
-.ext-item--clickable { cursor: pointer; }
-.ext-item--clickable:hover { border-color: rgb(99 102 241 / 30%); }
-.ext-item__icon { color: var(--color-accent); display: flex; padding-top: 2px; flex-shrink: 0; }
-.ext-item__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ext-item + .ext-item {
+  margin-top: var(--space-2);
+}
+.ext-item--clickable {
+  cursor: pointer;
+}
+.ext-item--clickable:hover {
+  border-color: rgb(99 102 241 / 30%);
+}
+.ext-item__icon {
+  color: var(--color-accent);
+  display: flex;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+.ext-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .ext-item__name {
   color: var(--color-text);
   font-size: 12px;
@@ -242,7 +270,11 @@ const mcpServers = ref([
   font-size: 11px;
   line-height: 1.4;
 }
-.ext-item__check { color: var(--color-accent); flex-shrink: 0; margin-top: 2px; }
+.ext-item__check {
+  color: var(--color-accent);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
 
 .ext-toggle {
   position: relative;
@@ -255,7 +287,9 @@ const mcpServers = ref([
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-out);
 }
-.ext-toggle--on { background: var(--color-accent); }
+.ext-toggle--on {
+  background: var(--color-accent);
+}
 .ext-toggle__knob {
   position: absolute;
   top: 2px;
@@ -266,7 +300,9 @@ const mcpServers = ref([
   background: #fff;
   transition: transform var(--duration-fast) var(--ease-out);
 }
-.ext-toggle--on .ext-toggle__knob { transform: translateX(16px); }
+.ext-toggle--on .ext-toggle__knob {
+  transform: translateX(16px);
+}
 
 .ext-tag {
   padding: 1px 6px;
@@ -290,7 +326,9 @@ const mcpServers = ref([
 /* Transition */
 .ext-slide-enter-active,
 .ext-slide-leave-active {
-  transition: transform 200ms var(--ease-out, ease), opacity 200ms ease;
+  transition:
+    transform 200ms var(--ease-out, ease),
+    opacity 200ms ease;
 }
 .ext-slide-enter-from,
 .ext-slide-leave-to {
