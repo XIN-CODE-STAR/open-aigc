@@ -3,16 +3,21 @@
  * MemoryCanvasPanel：Agent 工作记忆无限画布。
  *
  * 基于 vue-flow 实现真无限画布：
- * - 节点按 (x,y) 坐标空间定位，支持拖拽移动
+ * - 工具模式切换（tldraw 式）：选择 V / 便签 N / 图片 I，Escape 回到选择
+ * - 节点按 (x,y) 坐标空间定位，支持拖拽移动，右下角手柄拖拽缩放
  * - 缩放平移（鼠标滚轮 + 拖拽空白区域）
  * - 边连线表示节点关系（支持拖拽端点重连）
  * - 自定义节点卡片展示类型/摘要/状态/缩略图
- * - 拖拽节点后自动持久化位置，画布视口自动恢复
- * - 右键菜单（节点与空白处）、Ctrl+V 粘贴图片、沉浸模式
+ * - 拖拽节点后自动持久化位置，节点尺寸持久化在 payload_json
+ * - 统一右键菜单（节点与空白处）、Ctrl+C/V 复制粘贴节点、Ctrl+A 全选
+ * - Ctrl+V 粘贴图片、沉浸模式
+ *
+ * 状态/历史/持久化集中在 useCanvasStore（命令模式 Undo/Redo，500ms 防抖写库）；
+ * 本组件只做渲染和事件转发，不直接操作画布状态。
  */
 import { onMounted, onUnmounted, ref, watch, computed, nextTick } from "vue";
 import { VueFlow, useVueFlow } from "@vue-flow/core";
-import type { EdgeChange, NodeChange } from "@vue-flow/core";
+import type { GraphNode } from "@vue-flow/core";
 import { Background } from "@vue-flow/background";
 import { Controls } from "@vue-flow/controls";
 import { MiniMap } from "@vue-flow/minimap";
@@ -24,36 +29,28 @@ import {
   LoaderCircle,
   ImageIcon,
   StickyNote,
+  MousePointer2,
   Maximize,
   Maximize2,
+  Minimize2,
   Trash2,
   Rows3,
   CircleHelp,
   Download,
+  Grid3x3,
+  AlertCircle,
+  EyeOff,
+  Map,
 } from "@lucide/vue";
 import { invoke } from "@tauri-apps/api/core";
 
 import { useToast } from "../../../shared/ui/useToast";
 import CanvasNodeCard from "./CanvasNodeCard.vue";
-import type { MemoryNode, MemoryEdge } from "../../../bridge/memoryCanvas";
-import {
-  addNode,
-  addEdge,
-  updateNode,
-  createCanvas,
-  listCanvases,
-  listEdges,
-  listNodes,
-  getViewport,
-  saveViewport,
-  deleteNode as deleteNodeRpc,
-  deleteEdge as deleteEdgeRpc,
-} from "../../../bridge/memoryCanvas";
-
-/** 右键菜单动作触发的节点级回调（经 flowNodes.data 注入卡片）。 */
-type NodeMenuAction = "clone" | "preview" | "download" | "color" | "delete";
-
-const NOTE_COLORS = ["#fbbf24", "#60a5fa", "#34d399", "#f472b6"];
+import CanvasContextMenu from "./CanvasContextMenu.vue";
+import type { CanvasMenuItem } from "./CanvasContextMenu.vue";
+import type { MemoryNode } from "../../../bridge/memoryCanvas";
+import { getEffectiveSize } from "../canvasNodeSize";
+import { useCanvasStore } from "../composables/useCanvasStore";
 
 // ─── Props / Emits ───
 
@@ -68,29 +65,164 @@ const emit = defineEmits<{
 
 const toast = useToast();
 
-// ─── State ───
+// ─── Store（集中状态：nodes/edges/viewport/selection/history） ───
 
-const nodes = ref<MemoryNode[]>([]);
-const edges = ref<MemoryEdge[]>([]);
-const canvasId = ref<string | null>(null);
-const loading = ref(false);
-const selectedIds = ref<Set<string>>(new Set());
+const {
+  nodes,
+  edges,
+  canvasId,
+  loading,
+  loadError,
+  selectedIds,
+  viewport,
+  canUndo,
+  canRedo,
+  loadCanvas,
+  flushPendingWrites,
+  handleNodeChanges,
+  handleEdgeChanges,
+  saveViewport,
+  addNoteNodeAt,
+  addUploadNode,
+  addGenerationNode,
+  cloneNodes,
+  removeNode,
+  removeEdge,
+  moveNodes,
+  deleteSelected,
+  connectNodes,
+  reconnectEdge,
+  updateNoteText,
+  cycleNoteColor,
+  resizeNode,
+  setNodeStatus,
+  setNodeImageUrl,
+  findRecentNodesByType,
+  undo,
+  redo,
+  autoArrange: arrangeNodes,
+} = useCanvasStore();
+
 const selectedCount = computed(() => selectedIds.value.size);
 const compactMode = ref(false);
 const helpOpen = ref(false);
 const immersive = ref(false);
-const canvasMenu = ref<{ x: number; y: number; flowX: number; flowY: number } | null>(null);
 const lightboxUrl = ref<string | null>(null);
+
+// ── 工具模式（tldraw 式：选择 / 便签 / 图片） ───
+
+type CanvasTool = "select" | "note" | "image";
+const canvasTool = ref<CanvasTool>("select");
+
+function setTool(tool: CanvasTool): void {
+  canvasTool.value = tool;
+}
+
+/** 便签模式下点击空白创建后保持模式；图片模式选完文件后回到选择模式。 */
+function onPaneClick(event: MouseEvent): void {
+  if (canvasTool.value === "select") return;
+  const flow = screenToFlowCoordinate({ x: event.clientX, y: event.clientY });
+  if (canvasTool.value === "note") {
+    void addNoteNodeAt(flow.x, flow.y);
+    return;
+  }
+  canvasTool.value = "select";
+  void pickAndAddImages();
+}
+
+// ── 画布视觉（Phase 4）：网格样式 / 边描线动画 / hover 高亮两端 ───
+
+const MINIMAP_STORAGE_KEY = "memory-canvas-minimap";
+const minimapVisible = ref((localStorage.getItem(MINIMAP_STORAGE_KEY) ?? "1") === "1");
+
+function toggleMinimap(): void {
+  minimapVisible.value = !minimapVisible.value;
+  localStorage.setItem(MINIMAP_STORAGE_KEY, minimapVisible.value ? "1" : "0");
+}
+
+type GridMode = "dots" | "lines" | "none";
+const GRID_STORAGE_KEY = "memory-canvas-grid";
+const GRID_LABELS: Record<GridMode, string> = { dots: "点阵", lines: "方格", none: "无网格" };
+const gridMode = ref<GridMode>(
+  (localStorage.getItem(GRID_STORAGE_KEY) as GridMode | null) ?? "dots",
+);
+
+function cycleGrid(): void {
+  const order: GridMode[] = ["dots", "lines", "none"];
+  const next = order[(order.indexOf(gridMode.value) + 1) % order.length];
+  gridMode.value = next;
+  localStorage.setItem(GRID_STORAGE_KEY, next);
+}
+
+/** 新建连线的描线动画：短窗口内标记 class，动画结束后恢复常规样式 */
+const recentEdgeIds = ref<Set<string>>(new Set());
+const knownEdgeIds = new Set<string>();
+let edgesHydrated = false;
+watch(edges, (list) => {
+  if (!edgesHydrated) {
+    // 画布刚加载：存量边不做动画
+    for (const edge of list) knownEdgeIds.add(edge.id);
+    edgesHydrated = true;
+    return;
+  }
+  for (const edge of list) {
+    if (knownEdgeIds.has(edge.id)) continue;
+    knownEdgeIds.add(edge.id);
+    recentEdgeIds.value = new Set([...recentEdgeIds.value, edge.id]);
+    setTimeout(() => {
+      const next = new Set(recentEdgeIds.value);
+      next.delete(edge.id);
+      recentEdgeIds.value = next;
+    }, 1200);
+  }
+});
+
+// ── 统一右键菜单（节点 / 空白共用 CanvasContextMenu） ───
+
+const canvasMenu = ref<{ x: number; y: number; flowX: number; flowY: number } | null>(null);
+const nodeMenu = ref<{ id: string; x: number; y: number } | null>(null);
+
+const paneMenuItems = computed<CanvasMenuItem[]>(() => [
+  { key: "note", label: "新建便签" },
+  { key: "image", label: "导入图片" },
+  { key: "selectAll", label: "全选", disabled: nodes.value.length === 0 },
+  { key: "paste", label: "粘贴节点", disabled: clipboardNodes.value.length === 0 },
+]);
+
+const nodeMenuItems = computed<CanvasMenuItem[]>(() => {
+  const target = nodeMenu.value;
+  if (!target) return [];
+  const node = nodes.value.find((n) => n.id === target.id);
+  if (!node) return [];
+  const items: CanvasMenuItem[] = [];
+  if (node.nodeType === "note") items.push({ key: "edit", label: "编辑" });
+  items.push({ key: "copy", label: "复制" });
+  if (node.nodeType === "note") items.push({ key: "color", label: "换个颜色" });
+  if (node.nodeType === "image" || node.nodeType === "upload") {
+    if (nodeDataUrl(node)) {
+      items.push({ key: "preview", label: "查看大图" });
+      items.push({ key: "download", label: "下载图片" });
+    }
+  }
+  items.push({ key: "delete", label: "删除节点", danger: true });
+  return items;
+});
 
 // ─── Vue Flow setup ───
 
 const {
   fitView,
   setViewport,
-  project,
+  screenToFlowCoordinate,
+  addSelectedElements,
   onNodeDragStop,
   onConnect,
   onEdgeDoubleClick,
+  onEdgeMouseEnter,
+  onEdgeMouseLeave,
+  onEdgeUpdate,
+  onConnectStart,
+  onConnectEnd,
   onNodesChange,
   onEdgesChange,
   onMoveEnd,
@@ -106,265 +238,218 @@ const {
   snapGrid: [20, 20] as [number, number],
 });
 
-// ── 历史栈（Undo / Redo） ───
+/** hover 连线时高亮其两端节点（Phase 4） */
+const edgeHoverEndpoints = ref<Set<string>>(new Set());
+onEdgeMouseEnter(({ edge }) => {
+  edgeHoverEndpoints.value = new Set([edge.source, edge.target]);
+});
+onEdgeMouseLeave(() => {
+  edgeHoverEndpoints.value = new Set();
+});
 
-interface CanvasSnapshot {
-  nodes: MemoryNode[];
-  edges: MemoryEdge[];
-}
+// ── 键盘快捷键 ───
 
-const undoStack = ref<CanvasSnapshot[]>([]);
-const redoStack = ref<CanvasSnapshot[]>([]);
-const canUndo = computed(() => undoStack.value.length > 0);
-const canRedo = computed(() => redoStack.value.length > 0);
-
-function snapshot(): CanvasSnapshot {
-  return {
-    nodes: nodes.value.map((n) => ({ ...n })),
-    edges: edges.value.map((e) => ({ ...e })),
-  };
-}
-
-function pushUndo(): void {
-  undoStack.value = [...undoStack.value.slice(-49), snapshot()];
-  redoStack.value = [];
-}
-
-async function restoreSnapshot(snap: CanvasSnapshot): Promise<void> {
-  if (!canvasId.value) return;
-  const targetNodes = new Map(snap.nodes.map((n) => [n.id, n]));
-  const targetEdges = new Map(snap.edges.map((e) => [e.id, e]));
-
-  for (const e of [...edges.value]) {
-    if (!targetEdges.has(e.id)) {
-      edges.value = edges.value.filter((x) => x.id !== e.id);
-      try {
-        await deleteEdgeRpc(e.id);
-      } catch (err) {
-        console.warn("[MemoryCanvas] undo delete edge:", err);
-      }
-    }
-  }
-  for (const n of [...nodes.value]) {
-    if (!targetNodes.has(n.id)) {
-      edges.value = edges.value.filter((e) => e.sourceNodeId !== n.id && e.targetNodeId !== n.id);
-      nodes.value = nodes.value.filter((x) => x.id !== n.id);
-      try {
-        await deleteNodeRpc(n.id);
-      } catch (err) {
-        console.warn("[MemoryCanvas] undo delete node:", err);
-      }
-    }
-  }
-  for (const current of [...nodes.value]) {
-    const t = targetNodes.get(current.id);
-    if (!t) continue;
-    const changed =
-      t.nodeType !== current.nodeType ||
-      t.positionX !== current.positionX ||
-      t.positionY !== current.positionY ||
-      t.payloadJson !== current.payloadJson ||
-      (t.summary ?? undefined) !== (current.summary ?? undefined);
-    if (!changed) continue;
-    nodes.value = nodes.value.map((x) => (x.id === current.id ? { ...t } : x));
-    try {
-      await updateNode(
-        current.id,
-        current.canvasId,
-        t.nodeType,
-        t.positionX,
-        t.positionY,
-        t.payloadJson,
-        t.summary ?? undefined,
-        t.assetId ?? undefined,
-      );
-    } catch (err) {
-      console.warn("[MemoryCanvas] undo update node:", err);
-    }
-  }
-  const idMap = new Map<string, string>();
-  for (const t of snap.nodes) {
-    if (nodes.value.some((x) => x.id === t.id)) continue;
-    try {
-      const created = await addNode(
-        t.canvasId,
-        t.nodeType,
-        t.positionX,
-        t.positionY,
-        t.payloadJson,
-        t.summary ?? undefined,
-        t.assetId ?? undefined,
-      );
-      if (created) {
-        idMap.set(t.id, created.id);
-        nodes.value = [...nodes.value, created];
-      }
-    } catch (err) {
-      console.warn("[MemoryCanvas] undo add node:", err);
-    }
-  }
-  for (const e of snap.edges) {
-    if (edges.value.some((x) => x.id === e.id)) continue;
-    const src = idMap.get(e.sourceNodeId) ?? e.sourceNodeId;
-    const tgt = idMap.get(e.targetNodeId) ?? e.targetNodeId;
-    try {
-      const created = await addEdge(e.canvasId, src, tgt, e.edgeType, e.label ?? undefined);
-      if (created) {
-        idMap.set(e.id, created.id);
-        edges.value = [...edges.value, created];
-      }
-    } catch (err) {
-      console.warn("[MemoryCanvas] undo add edge:", err);
-    }
-  }
-}
-
-function undo(): void {
-  const prev = undoStack.value[undoStack.value.length - 1];
-  if (!prev) return;
-  undoStack.value = undoStack.value.slice(0, -1);
-  redoStack.value = [...redoStack.value, snapshot()];
-  void restoreSnapshot(prev);
-}
-
-function redo(): void {
-  const next = redoStack.value[redoStack.value.length - 1];
-  if (!next) return;
-  redoStack.value = redoStack.value.slice(0, -1);
-  undoStack.value = [...undoStack.value, snapshot()];
-  void restoreSnapshot(next);
+/** 文本输入中的按键不触发画布快捷键（便签编辑、其他输入框）。 */
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || typeof el.tagName !== "string") return false;
+  const tag = el.tagName.toUpperCase();
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
 }
 
 function onCanvasKeydown(event: KeyboardEvent): void {
   if (!props.visible) return;
-  if (!(event.ctrlKey || event.metaKey)) return;
+  if (isTextEntryTarget(event.target)) return;
   const key = event.key.toLowerCase();
-  if (key === "z") {
-    event.preventDefault();
-    if (event.shiftKey) redo();
-    else undo();
+
+  if (key === "escape") {
+    if (nodeMenu.value || canvasMenu.value) {
+      nodeMenu.value = null;
+      canvasMenu.value = null;
+    } else if (helpOpen.value) {
+      helpOpen.value = false;
+    } else if (lightboxUrl.value) {
+      lightboxUrl.value = null;
+    } else if (canvasTool.value !== "select") {
+      canvasTool.value = "select";
+    }
+    return;
   }
+
+  if (event.ctrlKey || event.metaKey) {
+    if (key === "z") {
+      event.preventDefault();
+      if (event.shiftKey) redo();
+      else undo();
+    } else if (key === "c") {
+      copySelectedNodes(event);
+    } else if (key === "a") {
+      event.preventDefault();
+      selectAllElements();
+    }
+    return;
+  }
+
+  if (event.altKey) return;
+  if (key === "v") canvasTool.value = "select";
+  else if (key === "n") canvasTool.value = "note";
+  else if (key === "i") canvasTool.value = "image";
+}
+
+// 页面隐藏/关闭时立即落库（onUnmounted 在窗口直接关闭时不保证触发，
+// 防抖窗口内（500ms）的改动靠这两个事件兜底）
+function flushOnHide(): void {
+  if (document.visibilityState === "hidden") void flushPendingWrites();
 }
 
 onMounted(() => {
   window.addEventListener("keydown", onCanvasKeydown);
   window.addEventListener("paste", onCanvasPaste);
+  document.addEventListener("visibilitychange", flushOnHide);
+  window.addEventListener("pagehide", flushOnHide);
 });
 onUnmounted(() => {
   window.removeEventListener("keydown", onCanvasKeydown);
   window.removeEventListener("paste", onCanvasPaste);
+  document.removeEventListener("visibilitychange", flushOnHide);
+  window.removeEventListener("pagehide", flushOnHide);
+  void flushPendingWrites(); // 离开画布时立即落库
 });
 
-// ── 选中与删除 ───
+// ── 复制 / 粘贴节点 ───
 
-function applyNodeChanges(changes: NodeChange[]): void {
-  for (const change of changes) {
-    if (change.type === "select") {
-      const next = new Set(selectedIds.value);
-      if (change.selected) next.add(change.id);
-      else next.delete(change.id);
-      selectedIds.value = next;
-    } else if (change.type === "remove") {
-      void removeNodeById(change.id);
-    }
-  }
+const clipboardNodes = ref<MemoryNode[]>([]);
+let pasteCount = 0;
+
+function copySelectedNodes(event?: KeyboardEvent): void {
+  const selected = nodes.value.filter((n) => selectedIds.value.has(n.id));
+  if (selected.length === 0) return;
+  clipboardNodes.value = selected.map((n) => ({ ...n }));
+  pasteCount = 0;
+  event?.preventDefault();
+  toast.success(`已复制 ${selected.length} 个节点。`);
 }
 
-function applyEdgeChanges(changes: EdgeChange[]): void {
-  for (const change of changes) {
-    if (change.type === "select") {
-      const next = new Set(selectedIds.value);
-      if (change.selected) next.add(change.id);
-      else next.delete(change.id);
-      selectedIds.value = next;
-    } else if (change.type === "remove") {
-      void removeEdgeById(change.id);
-    }
-  }
+/** 粘贴：指定 at 时以点击位置为粘贴范围左上角，否则相对源位置逐次偏移。 */
+async function pasteNodes(at?: { x: number; y: number }): Promise<void> {
+  if (!canvasId.value || clipboardNodes.value.length === 0) return;
+  pasteCount += 1;
+  const sources = clipboardNodes.value;
+  const minX = Math.min(...sources.map((n) => n.positionX));
+  const minY = Math.min(...sources.map((n) => n.positionY));
+  const step = 40 * (((pasteCount - 1) % 5) + 1);
+  const dx = at ? at.x - minX : step;
+  const dy = at ? at.y - minY : step;
+  const created = await cloneNodes(sources, { x: dx, y: dy });
+  if (created.length === 0) return;
+  selectNodes(created.map((n) => n.id));
+  toast.success(`已粘贴 ${created.length} 个节点。`);
 }
 
-async function removeNodeById(id: string): Promise<void> {
-  pushUndo();
-  const touched = edges.value.filter((e) => e.sourceNodeId === id || e.targetNodeId === id);
-  for (const edge of touched) {
-    try {
-      await deleteEdgeRpc(edge.id);
-    } catch (e) {
-      console.warn("[MemoryCanvas] delete edge failed:", e);
-    }
-  }
-  edges.value = edges.value.filter((e) => e.sourceNodeId !== id && e.targetNodeId !== id);
-  selectedIds.value.delete(id);
-  try {
-    await deleteNodeRpc(id);
-  } catch (e) {
-    console.warn("[MemoryCanvas] delete node failed:", e);
-    toast.error("节点删除失败，请重试。");
-    return;
-  }
-  nodes.value = nodes.value.filter((n) => n.id !== id);
+/** 通过 vue-flow 选择 API 选中节点（stub 只需 id/position），经 select 变更同步 selectedIds。 */
+function selectNodes(ids: string[]): void {
+  if (ids.length === 0) return;
+  const stubs = ids.map((id) => ({
+    id,
+    type: "canvasCard",
+    position: { x: 0, y: 0 },
+    data: {},
+  }));
+  addSelectedElements(stubs as unknown as GraphNode[]);
 }
 
-async function removeEdgeById(id: string): Promise<void> {
-  pushUndo();
-  edges.value = edges.value.filter((e) => e.id !== id);
-  try {
-    await deleteEdgeRpc(id);
-  } catch (e) {
-    console.warn("[MemoryCanvas] delete edge failed:", e);
-  }
+function selectAllElements(): void {
+  if (nodes.value.length === 0 && edges.value.length === 0) return;
+  const nodeStubs = flowNodes.value.map((n) => ({
+    id: n.id,
+    type: n.type,
+    position: n.position,
+    data: {},
+  }));
+  const edgeStubs = flowEdges.value.map((e) => ({ id: e.id, source: e.source, target: e.target }));
+  addSelectedElements([...nodeStubs, ...edgeStubs] as unknown as GraphNode[]);
 }
 
-// ── 手动连线：拖拽节点边缘即建立 reference 关系
-onConnect(async ({ source, target }) => {
-  if (!canvasId.value || source === target) return;
-  await addEdgeBetweenNodes(source, target, "reference");
-});
-
-// 双击连线删除
-onEdgeDoubleClick(async ({ edge }) => {
-  await removeEdgeById(edge.id);
-});
+// ── vue-flow 变更转发（状态逻辑在 store） ───
 
 // Delete/Backspace 删除选中（vue-flow 发出 remove 变更）
-onNodesChange(applyNodeChanges);
-onEdgesChange(applyEdgeChanges);
+onNodesChange(handleNodeChanges);
+onEdgesChange(handleEdgeChanges);
+
+// 手动连线：拖拽节点边缘即建立 reference 关系；重复/反向给出提示
+onConnect(async ({ source, target }) => {
+  const result = await connectNodes(source, target);
+  if (result === "created") {
+    recentlyConnected = true;
+    setTimeout(() => {
+      recentlyConnected = false;
+    }, 0);
+    connectionSource.value = null;
+  } else if (result === "duplicate") {
+    toast.warning("这两个节点之间已经有连线了。");
+  } else if (result === "reverse") {
+    toast.warning("已存在反方向的连线，无需重复连接。");
+  }
+});
+
+/** onConnect 成功建线后的短哨兵：避免 connectEnd 误判为「落在空白处」 */
+let recentlyConnected = false;
+
+// 连线方式补充：拖到空白处 → 原地创建一个便签并连好线（tldraw 式）
+const connectionSource = ref<{ nodeId: string; handleType: string } | null>(null);
+
+onConnectStart(({ nodeId, handleType }) => {
+  connectionSource.value = nodeId ? { nodeId, handleType: handleType ?? "source" } : null;
+});
+
+onConnectEnd(async (event) => {
+  if (!event) return;
+  const source = connectionSource.value;
+  connectionSource.value = null;
+  if (!source || !canvasId.value) return;
+  // onConnect 已成功建线（connect 先于 connectEnd 触发）则不再处理
+  if (recentlyConnected) return;
+  const pointer = "changedTouches" in event ? event.changedTouches[0] : (event as MouseEvent);
+  if (!pointer) return;
+
+  // 落点在节点上（放到无效位置）不处理
+  const hit = document.elementFromPoint(pointer.clientX, pointer.clientY);
+  if (hit?.closest(".canvas-node")) return;
+
+  const flow = screenToFlowCoordinate({ x: pointer.clientX, y: pointer.clientY });
+  const note = await addNoteNodeAt(flow.x - 90, flow.y - 20);
+  if (!note) return;
+  // source 手柄拖出 → 原节点指向新便签；target 手柄拖出 → 新便签指向原节点
+  const result =
+    source.handleType === "target"
+      ? await connectNodes(note.id, source.nodeId)
+      : await connectNodes(source.nodeId, note.id);
+  if (result === "created") {
+    toast.info("已在新位置创建便签并连线。", 2500);
+  }
+});
+
+// 端点重连：拖动已有连线的端点换目标（保留类型与标签，一条可撤销历史）
+onEdgeUpdate(async ({ edge, connection }) => {
+  if (!connection?.source || !connection?.target) return;
+  const ok = await reconnectEdge(edge.id, connection.source, connection.target);
+  if (!ok) {
+    toast.warning("无法调整到该位置（不能自连，且目标上已有连线）。");
+  }
+});
+
+// 双击连线删除（带自动消失的轻提示）
+onEdgeDoubleClick(async ({ edge }) => {
+  await removeEdge(edge.id);
+  toast.info("已删除连线，Ctrl+Z 可撤销。", 2500);
+});
 
 // 视口变化持久化
-onMoveEnd(async ({ flowTransform }) => {
-  if (!canvasId.value) return;
-  try {
-    await saveViewport(canvasId.value, flowTransform.zoom, flowTransform.x, flowTransform.y);
-  } catch (e) {
-    console.warn("[MemoryCanvas] save viewport failed:", e);
-  }
+onMoveEnd(({ flowTransform }) => {
+  void saveViewport(flowTransform.zoom, flowTransform.x, flowTransform.y);
 });
 
 // ── 工具栏动作 ───
-
-async function addNoteNodeAt(flowX: number, flowY: number): Promise<void> {
-  if (!canvasId.value) return;
-  pushUndo();
-  const text = "双击编辑便签";
-  const node = await addNode(
-    canvasId.value,
-    "note",
-    flowX,
-    flowY,
-    JSON.stringify({ text, source: "manual" }),
-    text,
-  );
-  if (node) nodes.value = [...nodes.value, node];
-}
-
-async function addNoteNode(): Promise<void> {
-  if (!canvasId.value) return;
-  pushUndo();
-  const last = nodes.value[nodes.value.length - 1];
-  const x = last ? last.positionX + 40 : 80;
-  const y = last ? last.positionY + 260 : 80;
-  await addNoteNodeAt(x, y);
-}
 
 async function pickAndAddImages(): Promise<void> {
   if (!canvasId.value) return;
@@ -385,139 +470,83 @@ async function pickAndAddImages(): Promise<void> {
   }
 }
 
-// ── 画布空白处右键菜单：在光标处新建便签/导入图片 ──
+// ── 画布空白处右键菜单：新建便签 / 导入图片 / 全选 / 粘贴 ──
 
 async function onCanvasContextMenu(event: MouseEvent): Promise<void> {
   const target = event.target as HTMLElement;
-  if (target.closest(".canvas-node") || target.closest(".canvas-toolbar")) return;
+  if (
+    target.closest(".canvas-node") ||
+    target.closest(".canvas-dock") ||
+    target.closest(".canvas-topbar")
+  ) {
+    return;
+  }
   event.preventDefault();
-  const flow = project({ x: event.clientX, y: event.clientY });
+  nodeMenu.value = null;
+  const flow = screenToFlowCoordinate({ x: event.clientX, y: event.clientY });
   canvasMenu.value = { x: event.clientX, y: event.clientY, flowX: flow.x, flowY: flow.y };
 }
 
-async function onCanvasMenuAction(action: "note" | "image"): Promise<void> {
-  const menu = canvasMenu.value;
+function openNodeMenu(id: string, clientX: number, clientY: number): void {
   canvasMenu.value = null;
-  if (!menu) return;
-  if (action === "note") await addNoteNodeAt(menu.flowX, menu.flowY);
-  else await pickAndAddImages();
+  nodeMenu.value = { id, x: clientX, y: clientY };
 }
 
-// ── 剪贴板粘贴图片（Ctrl+V）──
+async function onPaneMenuSelect(action: string): Promise<void> {
+  const menu = canvasMenu.value;
+  if (!menu) return;
+  if (action === "note") await addNoteNodeAt(menu.flowX, menu.flowY);
+  else if (action === "image") void pickAndAddImages();
+  else if (action === "selectAll") selectAllElements();
+  else if (action === "paste") await pasteNodes({ x: menu.flowX, y: menu.flowY });
+}
+
+// ── 双击空白处：在该位置新建便签 ──
+
+function onPaneDblClick(event: MouseEvent): void {
+  const flow = screenToFlowCoordinate({ x: event.clientX, y: event.clientY });
+  void addNoteNodeAt(flow.x, flow.y);
+}
+
+// ── 剪贴板粘贴（Ctrl+V）：图片优先，其次粘贴已复制的节点 ──
 
 async function onCanvasPaste(event: ClipboardEvent): Promise<void> {
   if (!props.visible || !canvasId.value) return;
   const files = [...(event.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
-  if (files.length === 0) return;
-  event.preventDefault();
-  for (const file of files) {
-    const dataUrl = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.readAsDataURL(file);
-    });
-    await addUploadNode("upload", file.name || "粘贴的图片", dataUrl);
+  if (files.length > 0) {
+    event.preventDefault();
+    for (const file of files) {
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.readAsDataURL(file);
+      });
+      await addUploadNode("upload", file.name || "粘贴的图片", dataUrl);
+    }
+    toast.success(`已粘贴 ${files.length} 张图片到画布。`);
+    return;
   }
-  toast.success(`已粘贴 ${files.length} 张图片到画布。`);
+  // 正在文本框里输入时不劫持粘贴
+  if (isTextEntryTarget(event.target)) return;
+  if (clipboardNodes.value.length === 0) return;
+  event.preventDefault();
+  await pasteNodes();
 }
 
 function fitCanvas(): void {
   void fitView({ padding: 0.2 });
 }
 
-// ── 自动整理：按类型分组排成竖列 ───
+// ── 自动整理：store 打包为一条 MacroCommand，完成后适应视图 ───
 
 async function autoArrange(): Promise<void> {
-  if (!canvasId.value) return;
-  pushUndo();
-  const order = ["upload", "image", "note", "video", "document", "fact"];
-  const groups = new Map<string, MemoryNode[]>();
-  for (const n of nodes.value) {
-    const list = groups.get(n.nodeType) || [];
-    list.push(n);
-    groups.set(n.nodeType, list);
-  }
-  const sortedTypes = [...groups.keys()].sort((a, b) => order.indexOf(a) - order.indexOf(b));
-  let column = 0;
-  const updates: Promise<unknown>[] = [];
-  for (const nodeType of sortedTypes) {
-    let row = 0;
-    for (const n of groups.get(nodeType) || []) {
-      const x = 60 + column * 280;
-      const y = 60 + row * 260;
-      if (n.positionX !== x || n.positionY !== y) {
-        nodes.value = nodes.value.map((old) =>
-          old.id === n.id ? { ...old, positionX: x, positionY: y } : old,
-        );
-        updates.push(
-          updateNode(
-            n.id,
-            n.canvasId,
-            n.nodeType,
-            x,
-            y,
-            n.payloadJson,
-            n.summary ?? undefined,
-            n.assetId ?? undefined,
-          ).catch((e) => console.warn("[MemoryCanvas] arrange persist failed:", e)),
-        );
-      }
-      row += 1;
-    }
-    column += 1;
-  }
-  await Promise.all(updates);
+  await arrangeNodes();
   setTimeout(() => fitView({ padding: 0.2 }), 80);
-}
-
-async function deleteSelected(): Promise<void> {
-  for (const id of [...selectedIds.value]) {
-    if (nodes.value.some((n) => n.id === id)) await removeNodeById(id);
-  }
-  for (const id of [...selectedIds.value]) {
-    if (edges.value.some((e) => e.id === id)) await removeEdgeById(id);
-  }
-  selectedIds.value = new Set();
-}
-
-// ── 便签编辑持久化 ───
-
-async function saveNoteSummary(id: string, text: string): Promise<void> {
-  const node = nodes.value.find((n) => n.id === id);
-  if (!node) return;
-  pushUndo();
-  let payload = node.payloadJson;
-  try {
-    const parsed = JSON.parse(node.payloadJson);
-    parsed.text = text;
-    payload = JSON.stringify(parsed);
-  } catch {
-    payload = JSON.stringify({ text, source: "manual" });
-  }
-  nodes.value = nodes.value.map((n) =>
-    n.id === id ? { ...n, summary: text, payloadJson: payload } : n,
-  );
-  try {
-    await updateNode(
-      id,
-      node.canvasId,
-      node.nodeType,
-      node.positionX,
-      node.positionY,
-      payload,
-      text,
-      node.assetId ?? undefined,
-    );
-  } catch (e) {
-    console.warn("[MemoryCanvas] save note failed:", e);
-  }
 }
 
 // ── 右键菜单动作 ───
 
-function nodeDataUrl(id: string): string | null {
-  const node = nodes.value.find((n) => n.id === id);
-  if (!node) return null;
+function nodeDataUrl(node: MemoryNode): string | null {
   try {
     const p = JSON.parse(node.payloadJson);
     return p.dataUrl || p.imageUrl || null;
@@ -526,40 +555,13 @@ function nodeDataUrl(id: string): string | null {
   }
 }
 
-function cycleNoteColor(id: string): void {
-  const node = nodes.value.find((n) => n.id === id);
-  if (!node) return;
-  pushUndo();
-  let payload: Record<string, unknown> = {};
-  try {
-    payload = JSON.parse(node.payloadJson);
-  } catch {
-    payload = {};
-  }
-  const current = (payload.color as string) || NOTE_COLORS[0];
-  const next = NOTE_COLORS[(NOTE_COLORS.indexOf(current) + 1) % NOTE_COLORS.length];
-  payload.color = next;
-  const payloadJson = JSON.stringify(payload);
-  nodes.value = nodes.value.map((n) => (n.id === id ? { ...n, payloadJson } : n));
-  void updateNode(
-    id,
-    node.canvasId,
-    node.nodeType,
-    node.positionX,
-    node.positionY,
-    payloadJson,
-    node.summary ?? undefined,
-    node.assetId ?? undefined,
-  ).catch((e) => console.warn("[MemoryCanvas] save color failed:", e));
-}
-
 function downloadNodeImage(id: string): void {
-  const url = nodeDataUrl(id);
-  if (!url) return;
   const node = nodes.value.find((n) => n.id === id);
+  const url = node ? nodeDataUrl(node) : null;
+  if (!node || !url) return;
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${node?.summary || "canvas-image"}.png`;
+  anchor.download = `${node.summary || "canvas-image"}.png`;
   anchor.click();
 }
 
@@ -582,34 +584,34 @@ function exportCanvasJson(): void {
 
 function cloneNode(id: string): void {
   const node = nodes.value.find((n) => n.id === id);
-  if (!node || !canvasId.value) return;
-  pushUndo();
-  const x = node.positionX + 40;
-  const y = node.positionY + 40;
-  addNode(
-    canvasId.value,
-    node.nodeType,
-    x,
-    y,
-    node.payloadJson,
-    (node.summary || "副本") + " 副本",
-    node.assetId ?? undefined,
-  ).then((created) => {
-    if (created) nodes.value = [...nodes.value, created];
-  });
+  if (!node) return;
+  void cloneNodes(
+    [{ ...node, summary: (node.summary || "副本") + " 副本" }],
+    { x: 40, y: 40 },
+    "复制节点",
+  );
 }
 
-async function handleNodeMenuAction(id: string, action: NodeMenuAction): Promise<void> {
-  if (action === "delete") {
-    await removeNodeById(id);
+/** 面板侧统一处理节点菜单动作；「编辑」经 editSignal 通知卡片进入编辑态。 */
+async function onNodeMenuSelect(action: string): Promise<void> {
+  const target = nodeMenu.value;
+  if (!target) return;
+  const id = target.id;
+  if (action === "edit") {
+    editSignals.value = { ...editSignals.value, [id]: (editSignals.value[id] ?? 0) + 1 };
     return;
   }
-  if (action === "clone") {
+  if (action === "copy") {
     cloneNode(id);
     return;
   }
+  if (action === "color") {
+    cycleNoteColor(id);
+    return;
+  }
   if (action === "preview") {
-    const url = nodeDataUrl(id);
+    const node = nodes.value.find((n) => n.id === id);
+    const url = node ? nodeDataUrl(node) : null;
     if (url) lightboxUrl.value = url;
     return;
   }
@@ -617,241 +619,141 @@ async function handleNodeMenuAction(id: string, action: NodeMenuAction): Promise
     downloadNodeImage(id);
     return;
   }
-  if (action === "color") {
-    cycleNoteColor(id);
+  if (action === "delete") {
+    await removeNode(id);
   }
 }
 
 function saveNoteLocal(id: string, text: string): void {
-  void saveNoteSummary(id, text);
+  void updateNoteText(id, text);
 }
 
 function removeNodeCb(id: string): void {
-  void removeNodeById(id);
+  void removeNode(id);
 }
 
-// Persist node position on drag end
-onNodeDragStop(async ({ nodes: draggedNodes }) => {
-  if (!canvasId.value) return;
+// Persist node position on drag end（防抖合并与命令入栈在 store）
+onNodeDragStop(({ nodes: draggedNodes }) => {
+  const moves: { id: string; x: number; y: number }[] = [];
   for (const fn of draggedNodes) {
-    const memNode = nodes.value.find((n) => n.id === fn.id);
-    if (!memNode) continue;
-    const newX = Math.round(fn.position.x);
-    const newY = Math.round(fn.position.y);
-    if (newX === memNode.positionX && newY === memNode.positionY) continue;
-    pushUndo();
-    nodes.value = nodes.value.map((n) =>
-      n.id === fn.id ? { ...n, positionX: newX, positionY: newY } : n,
-    );
-    try {
-      await updateNode(
-        fn.id,
-        memNode.canvasId,
-        memNode.nodeType,
-        newX,
-        newY,
-        memNode.payloadJson,
-        memNode.summary ?? undefined,
-        memNode.assetId ?? undefined,
-      );
-    } catch (e) {
-      console.warn("[MemoryCanvas] failed to persist position:", e);
-      toast.warning("节点位置保存失败，重开画布后会恢复。");
-    }
+    if (!nodes.value.some((n) => n.id === fn.id)) continue;
+    moves.push({ id: fn.id, x: Math.round(fn.position.x), y: Math.round(fn.position.y) });
   }
+  void moveNodes(moves);
 });
 
 // ─── Vue Flow nodes/edges (reactive transform) ───
 
+const editSignals = ref<Record<string, number>>({});
+
 const flowNodes = computed(() =>
-  nodes.value.map((n) => ({
-    id: n.id,
-    type: "canvasCard" as const,
-    position: { x: n.positionX, y: n.positionY },
-    data: {
-      nodeType: n.nodeType,
-      summary: n.summary,
-      payloadJson: n.payloadJson,
-      assetId: n.assetId,
-      compact: compactMode.value,
-      onDelete: () => removeNodeCb(n.id),
-      onSaveSummary: (text: string) => saveNoteLocal(n.id, text),
-      onMenuAction: (action: NodeMenuAction) => handleNodeMenuAction(n.id, action),
-    },
-    style: {
-      width: n.width ? `${n.width}px` : "220px",
-    },
-  })),
+  nodes.value.map((n) => {
+    const size = getEffectiveSize(n);
+    return {
+      id: n.id,
+      type: "canvasCard" as const,
+      position: { x: n.positionX, y: n.positionY },
+      class: edgeHoverEndpoints.value.has(n.id) ? "edge-endpoint-highlight" : undefined,
+      data: {
+        nodeType: n.nodeType,
+        summary: n.summary,
+        payloadJson: n.payloadJson,
+        assetId: n.assetId,
+        compact: compactMode.value,
+        size,
+        editSignal: editSignals.value[n.id] ?? 0,
+        onContextMenu: (clientX: number, clientY: number) => openNodeMenu(n.id, clientX, clientY),
+        onDelete: () => removeNodeCb(n.id),
+        onSaveSummary: (text: string) => saveNoteLocal(n.id, text),
+        onResize: (width: number, height?: number) => void resizeNode(n.id, width, height),
+      },
+      style: {
+        width: `${size.width}px`,
+        ...(size.height ? { height: `${size.height}px` } : {}),
+      },
+    };
+  }),
 );
 
 const flowEdges = computed(() =>
-  edges.value.map((e) => ({
-    id: e.id,
-    source: e.sourceNodeId,
-    target: e.targetNodeId,
-    label: (e.label || undefined) as string | undefined,
-    type: "smoothstep" as const,
-    animated: e.edgeType === "reference",
-    style: {
-      stroke: getEdgeColor(e.edgeType),
-      strokeWidth: 2,
-    },
-    markerEnd: { type: "arrowclosed" as const, color: getEdgeColor(e.edgeType) },
-  })),
+  edges.value.map((e) => {
+    const visual = getEdgeVisual(e.edgeType);
+    return {
+      id: e.id,
+      source: e.sourceNodeId,
+      target: e.targetNodeId,
+      label: (e.label || undefined) as string | undefined,
+      type: "bezier" as const,
+      // reference 不再用 vue-flow 的 animated（会被渲染成虚线），线型由 style 统一
+      animated: false,
+      class: recentEdgeIds.value.has(e.id) ? "edge-draw" : undefined,
+      style: {
+        stroke: visual.stroke,
+        strokeWidth: visual.strokeWidth,
+        ...(visual.strokeDasharray ? { strokeDasharray: visual.strokeDasharray } : {}),
+      },
+      markerEnd: { type: "arrowclosed" as const, color: visual.stroke },
+    };
+  }),
 );
 
-function getEdgeColor(edgeType: string): string {
-  const colors: Record<string, string> = {
-    reference: "#6366f1",
-    dependency: "#f59e0b",
-    link: "#22c55e",
-    similarity: "#06b6d4",
-  };
-  return colors[edgeType] || "#94a3b8";
+/** 按边类型区分颜色与线型（Phase 4 视觉）。 */
+function getEdgeVisual(edgeType: string): {
+  stroke: string;
+  strokeWidth: number;
+  strokeDasharray?: string;
+} {
+  switch (edgeType) {
+    case "reference":
+      return { stroke: "#6366f1", strokeWidth: 2 };
+    case "dependency":
+      return { stroke: "#a78bfa", strokeWidth: 2.5, strokeDasharray: "10 5" };
+    case "link":
+      return { stroke: "#38bdf8", strokeWidth: 1.5 };
+    case "similarity":
+      return { stroke: "#818cf8", strokeWidth: 2, strokeDasharray: "2 5" };
+    default:
+      return { stroke: "#94a3b8", strokeWidth: 1.5 };
+  }
 }
 
 // ─── Canvas lifecycle ───
 
+async function initCanvas(): Promise<void> {
+  // 画布切换时重置描线动画的存量标记（加载时的边不播动画）
+  knownEdgeIds.clear();
+  edgesHydrated = false;
+  await loadCanvas(props.conversationId);
+  const vp = viewport.value;
+  if (vp) {
+    await nextTick();
+    setTimeout(() => setViewport({ zoom: vp.zoom, x: vp.x, y: vp.y }), 120);
+  }
+  await nextTick();
+  if (nodes.value.length > 0) {
+    setTimeout(() => fitView({ padding: 0.2 }), 100);
+  }
+}
+
 watch(
   () => props.conversationId,
-  async (id) => {
-    if (!id) {
-      nodes.value = [];
-      edges.value = [];
-      canvasId.value = null;
-      return;
-    }
-    await loadOrCreateCanvas(id);
-  },
+  () => void initCanvas(),
   { immediate: true },
 );
 
-async function loadOrCreateCanvas(conversationId: string): Promise<void> {
-  loading.value = true;
-  try {
-    const canvases = await listCanvases("default");
-    const existing = canvases.find((c) => c.name === `conv-${conversationId}`);
-    if (existing) {
-      canvasId.value = existing.id;
-      nodes.value = await listNodes(existing.id);
-      edges.value = await listEdges(existing.id);
-      try {
-        const vp = await getViewport(existing.id);
-        if (vp) {
-          await nextTick();
-          setTimeout(() => setViewport({ zoom: vp.zoom, x: vp.panX, y: vp.panY }), 120);
-        }
-      } catch {
-        /* no viewport saved yet */
-      }
-    } else {
-      const canvas = await createCanvas("default", `conv-${conversationId}`);
-      canvasId.value = canvas.id;
-      nodes.value = [];
-      edges.value = [];
-    }
-    await nextTick();
-    if (nodes.value.length > 0) {
-      setTimeout(() => fitView({ padding: 0.2 }), 100);
-    }
-  } catch (e) {
-    console.error("[MemoryCanvas] loadOrCreateCanvas error:", e);
-  } finally {
-    loading.value = false;
-  }
+/** 加载失败后的重试（Phase 5 错误恢复）。 */
+function retryLoad(): void {
+  void initCanvas();
 }
 
-// ─── Exposed methods (same API as before) ───
-
-async function addGenerationNode(
-  nodeType: string,
-  prompt: string,
-  assetId?: string,
-  name?: string,
-): Promise<string | null> {
-  if (!canvasId.value) return null;
-  pushUndo();
-  const lastNode = nodes.value[nodes.value.length - 1];
-  const x = lastNode ? lastNode.positionX + 260 : 40;
-  const y = lastNode ? lastNode.positionY + (nodes.value.length % 3 === 0 ? -80 : 80) : 40;
-  const summary = name || prompt.slice(0, 50);
-  const node = await addNode(
-    canvasId.value,
-    nodeType,
-    x,
-    y,
-    JSON.stringify({ prompt, status: "pending" }),
-    summary,
-    assetId,
-  );
-  if (node) {
-    nodes.value = [...nodes.value, node];
-    return node.id;
-  }
-  return null;
-}
-
-async function addUploadNode(
-  nodeType: string,
-  name: string,
-  dataUrl: string,
-  description?: string,
-): Promise<string | null> {
-  if (!canvasId.value) return null;
-  pushUndo();
-  const lastNode = nodes.value[nodes.value.length - 1];
-  const x = lastNode ? lastNode.positionX + 260 : 40;
-  const y = lastNode ? lastNode.positionY : 40;
-  // 必须存完整 data URL：截断会让 base64 解码失败，节点图片永远无法渲染
-  const payload: Record<string, string> = { source: "user-upload", dataUrl };
-  if (description) payload.description = description;
-  const node = await addNode(canvasId.value, nodeType, x, y, JSON.stringify(payload), name);
-  if (node) {
-    nodes.value = [...nodes.value, node];
-    return node.id;
-  }
-  return null;
-}
-
-async function addEdgeBetweenNodes(
-  sourceId: string,
-  targetId: string,
-  edgeType = "reference",
-): Promise<void> {
-  if (!canvasId.value) return;
-  pushUndo();
-  const exists = edges.value.some(
-    (e) => e.sourceNodeId === sourceId && e.targetNodeId === targetId && e.edgeType === edgeType,
-  );
-  if (exists) return;
-  const edge = await addEdge(canvasId.value, sourceId, targetId, edgeType);
-  if (edge) {
-    edges.value = [...edges.value, edge];
-  }
-}
-
-function setNodeStatus(nodeId: string, status: string): void {
-  const node = nodes.value.find((n) => n.id === nodeId);
-  if (!node) return;
-  try {
-    const payload = JSON.parse(node.payloadJson);
-    payload.status = status;
-    const newPayload = JSON.stringify(payload);
-    nodes.value = nodes.value.map((n) => (n.id === nodeId ? { ...n, payloadJson: newPayload } : n));
-  } catch {
-    // ignore
-  }
-}
-
-function findRecentNodesByType(nodeType: string, limit = 3): MemoryNode[] {
-  return nodes.value.filter((n) => n.nodeType === nodeType).slice(-limit);
-}
+// ─── Exposed methods（GenerationsPage 等外部调用，直接代理 store） ───
 
 defineExpose({
   addGenerationNode,
   addUploadNode,
-  addEdgeBetweenNodes,
+  addEdgeBetweenNodes: connectNodes,
   setNodeStatus,
+  setNodeImageUrl,
   findRecentNodesByType,
 });
 </script>
@@ -865,25 +767,17 @@ defineExpose({
       @contextmenu="onCanvasContextMenu"
       @paste="onCanvasPaste"
     >
-      <!-- Header -->
-      <div class="canvas-header">
-        <span class="canvas-header__title">工作记忆画布</span>
-        <span class="canvas-header__count">{{ nodes.length }} 节点 · {{ edges.length }} 连线</span>
-        <button
-          class="icon-btn"
-          :title="immersive ? '退出沉浸模式' : '沉浸模式（全窗口画布）'"
-          @click="immersive = !immersive"
-        >
-          <Maximize2 :size="14" />
-        </button>
-        <button class="icon-btn" @click="emit('close')">
-          <X :size="14" />
-        </button>
-      </div>
-
+      <!-- Loading / 错误 / 空状态覆盖层 -->
       <!-- Loading -->
       <div v-if="loading" class="canvas-loading canvas-loading--overlay">
         <LoaderCircle :size="20" class="is-spinning" />
+      </div>
+
+      <!-- Load failure（Phase 5 错误恢复）：可重试 -->
+      <div v-if="!loading && loadError" class="canvas-error-overlay">
+        <AlertCircle :size="26" />
+        <span class="canvas-error-overlay__message">画布加载失败：{{ loadError }}</span>
+        <button class="canvas-error-overlay__retry" type="button" @click="retryLoad">重试</button>
       </div>
 
       <!-- Empty state overlay（画布始终渲染，便于手动添加节点） -->
@@ -892,214 +786,325 @@ defineExpose({
         class="canvas-empty canvas-empty--overlay"
       >
         <ImageIcon :size="32" />
-        <span>画布还是空的：右键空白处新建，或用上方工具栏添加</span>
+        <span>画布还是空的：按 N 进入便签模式后点击空白处创建</span>
         <span class="canvas-empty__hint"
-          >支持 Ctrl+V 粘贴图片、拖拽图片文件进来；Shift+拖拽框选，Delete 删除选中</span
+          >也支持右键空白处新建、Ctrl+V 粘贴图片；按 ? 或工具栏帮助查看全部快捷键</span
         >
       </div>
 
-      <!-- Canvas toolbar -->
-      <div v-if="!loading && canvasId" class="canvas-toolbar">
-        <button
-          class="canvas-toolbar__btn"
-          type="button"
-          title="撤销（Ctrl+Z）"
-          :disabled="!canUndo"
-          @click="undo"
+      <!-- 画布舞台 -->
+      <div class="canvas-stage">
+        <!-- Vue Flow Canvas -->
+        <VueFlow
+          class="memory-canvas"
+          :class="`memory-canvas--tool-${canvasTool}`"
+          :nodes="flowNodes"
+          :edges="flowEdges as any"
+          :default-edge-options="{ type: 'default', animated: true }"
+          :snap-to-grid="true"
+          :snap-grid="[20, 20]"
+          :min-zoom="0.2"
+          :max-zoom="3"
+          :default-viewport="{ zoom: 0.8, x: 0, y: 0 }"
+          :edges-updatable="true"
+          :connection-line-style="{ stroke: '#818cf8', strokeWidth: 2, strokeDasharray: '6 4' }"
+          :connection-radius="30"
+          :elevate-nodes-on-select="true"
+          :only-render-visible-elements="nodes.length > 40"
+          :delete-key-code="['Backspace', 'Delete']"
+          @pane-click="onPaneClick"
+          @pane-double-click="onPaneDblClick"
         >
-          <Undo2 :size="15" />
-        </button>
-        <button
-          class="canvas-toolbar__btn"
-          type="button"
-          title="重做（Ctrl+Shift+Z）"
-          :disabled="!canRedo"
-          @click="redo"
-        >
-          <Redo2 :size="15" />
-        </button>
-        <span class="canvas-toolbar__divider" />
-        <button class="canvas-toolbar__btn" type="button" title="添加便签" @click="addNoteNode">
-          <StickyNote :size="15" />
-          <span>便签</span>
-        </button>
-        <button
-          class="canvas-toolbar__btn"
-          type="button"
-          title="添加图片文件"
-          @click="pickAndAddImages"
-        >
-          <ImageIcon :size="15" />
-          <span>图片</span>
-        </button>
-        <span class="canvas-toolbar__divider" />
-        <button
-          class="canvas-toolbar__btn"
-          type="button"
-          title="自动整理（按类型分组）"
-          @click="autoArrange"
-        >
-          <AlignStartVertical :size="15" />
-        </button>
-        <button
-          class="canvas-toolbar__btn"
-          type="button"
-          :title="compactMode ? '详细模式' : '紧凑模式'"
-          @click="compactMode = !compactMode"
-        >
-          <Rows3 :size="15" />
-        </button>
-        <span class="canvas-toolbar__divider" />
-        <button class="canvas-toolbar__btn" type="button" title="适应视图" @click="fitCanvas">
-          <Maximize :size="15" />
-        </button>
-        <button
-          class="canvas-toolbar__btn"
-          type="button"
-          title="导出画布 JSON"
-          @click="exportCanvasJson"
-        >
-          <Download :size="15" />
-        </button>
-        <button
-          class="canvas-toolbar__btn"
-          type="button"
-          title="快捷键说明"
-          @click="helpOpen = true"
-        >
-          <CircleHelp :size="15" />
-        </button>
-        <span class="canvas-toolbar__divider" />
-        <button
-          class="canvas-toolbar__btn canvas-toolbar__btn--danger"
-          type="button"
-          title="删除选中（Delete）"
-          :disabled="selectedCount === 0"
-          @click="deleteSelected"
-        >
-          <Trash2 :size="15" />
-        </button>
-      </div>
+          <template #node-canvasCard="nodeProps">
+            <CanvasNodeCard v-bind="nodeProps" />
+          </template>
 
-      <!-- Vue Flow Canvas -->
-      <VueFlow
-        class="memory-canvas"
-        :nodes="flowNodes"
-        :edges="flowEdges as any"
-        :default-edge-options="{ type: 'smoothstep', animated: true }"
-        :snap-to-grid="true"
-        :snap-grid="[20, 20]"
-        :min-zoom="0.2"
-        :max-zoom="3"
-        :default-viewport="{ zoom: 0.8, x: 0, y: 0 }"
-        :edges-updatable="true"
-        :connection-radius="30"
-        :elevate-nodes-on-select="true"
-        :only-render-visible-elements="nodes.length > 40"
-      >
-        <template #node-canvasCard="nodeProps">
-          <CanvasNodeCard v-bind="nodeProps" />
-        </template>
+          <Background
+            v-if="gridMode !== 'none'"
+            :variant="gridMode"
+            :pattern-color="
+              gridMode === 'dots' ? 'rgba(148, 163, 248, 0.14)' : 'rgba(148, 163, 248, 0.16)'
+            "
+            :gap="gridMode === 'lines' ? 28 : 20"
+            :size="1"
+          />
+          <Controls position="bottom-right" />
 
-        <Background pattern-color="rgba(99, 102, 241, 0.08)" :gap="20" :size="1" />
-        <Controls position="bottom-right" />
-
-        <!-- 画布空白处右键菜单 -->
-        <teleport to="body">
-          <div
+          <!-- 空白处右键菜单（统一组件） -->
+          <CanvasContextMenu
             v-if="canvasMenu"
-            class="canvas-menu-backdrop"
-            @click="canvasMenu = null"
-            @contextmenu.prevent="canvasMenu = null"
+            :x="canvasMenu.x"
+            :y="canvasMenu.y"
+            :items="paneMenuItems"
+            @select="onPaneMenuSelect"
+            @close="canvasMenu = null"
+          />
+
+          <!-- 节点右键菜单（统一组件） -->
+          <CanvasContextMenu
+            v-if="nodeMenu"
+            :x="nodeMenu.x"
+            :y="nodeMenu.y"
+            :items="nodeMenuItems"
+            @select="onNodeMenuSelect"
+            @close="nodeMenu = null"
+          />
+
+          <!-- 快捷键帮助 -->
+          <teleport to="body">
+            <div v-if="helpOpen" class="canvas-help-backdrop" @click="helpOpen = false">
+              <div class="canvas-help" @click.stop>
+                <div class="canvas-help__title">画布快捷键与操作</div>
+
+                <div class="canvas-help__section">工具模式</div>
+                <div class="canvas-help__row">
+                  <span>V / N / I</span><span>切换 选择 / 便签 / 图片 模式</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>Esc</span><span>回到选择模式 / 关闭菜单和弹窗</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>便签模式</span><span>点击空白处创建便签（可连续创建）</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>图片模式</span><span>点击空白处打开文件选择器</span>
+                </div>
+
+                <div class="canvas-help__section">节点操作</div>
+                <div class="canvas-help__row">
+                  <span>拖拽节点</span><span>调整位置（自动保存）</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>节点右下角手柄</span><span>拖拽调整节点大小（自动保存）</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>双击便签</span><span>编辑内容（Enter 保存 / Esc 取消）</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>右键节点</span><span>编辑 / 复制 / 换色 / 查看大图 / 下载 / 删除</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>拖拽节点边缘圆点</span><span>连线到目标节点（可拖动端点重连）</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>连线拖到空白处</span><span>原地创建便签并自动连线</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>双击连线</span><span>删除连线（有提示，可撤销）</span>
+                </div>
+
+                <div class="canvas-help__section">选择与剪贴板</div>
+                <div class="canvas-help__row">
+                  <span>Shift + 拖拽</span><span>框选多个节点</span>
+                </div>
+                <div class="canvas-help__row"><span>Ctrl+A</span><span>全选节点和连线</span></div>
+                <div class="canvas-help__row">
+                  <span>Ctrl+C / Ctrl+V</span><span>复制 / 粘贴选中的节点</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>Ctrl+V</span><span>粘贴剪贴板图片到画布</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>Delete / Backspace</span><span>删除选中的节点/连线</span>
+                </div>
+
+                <div class="canvas-help__section">画布</div>
+                <div class="canvas-help__row">
+                  <span>右键空白处</span><span>新建便签 / 导入图片 / 全选 / 粘贴节点</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>双击空白处</span><span>在该位置新建便签</span>
+                </div>
+                <div class="canvas-help__row">
+                  <span>Ctrl+Z / Ctrl+Shift+Z</span><span>撤销 / 重做</span>
+                </div>
+                <button class="canvas-help__close" type="button" @click="helpOpen = false">
+                  知道了
+                </button>
+              </div>
+            </div>
+          </teleport>
+
+          <!-- 图片大图预览 -->
+          <teleport to="body">
+            <div v-if="lightboxUrl" class="canvas-lightbox" @click="lightboxUrl = null">
+              <img :src="lightboxUrl" alt="预览" />
+            </div>
+          </teleport>
+
+          <MiniMap
+            v-if="minimapVisible"
+            position="bottom-left"
+            :pannable="true"
+            :zoomable="true"
+            :node-color="(n: any) => getNodeColor(n.data?.nodeType)"
+            :mask-color="'rgb(15, 20, 30, 0.7)'"
+            class="canvas-minimap"
+          />
+          <button
+            v-if="minimapVisible"
+            class="minimap-btn minimap-btn--hide"
+            type="button"
+            title="隐藏小地图"
+            @click="toggleMinimap"
           >
-            <div
-              class="canvas-menu"
-              :style="{ left: `${canvasMenu.x}px`, top: `${canvasMenu.y}px` }"
-              @click.stop
-            >
-              <button class="canvas-menu__item" type="button" @click="onCanvasMenuAction('note')">
-                在此处新建便签
-              </button>
-              <button class="canvas-menu__item" type="button" @click="onCanvasMenuAction('image')">
-                在此处导入图片
-              </button>
-            </div>
-          </div>
-        </teleport>
+            <EyeOff :size="12" />
+          </button>
+          <button
+            v-else
+            class="minimap-btn minimap-btn--show"
+            type="button"
+            title="显示小地图"
+            @click="toggleMinimap"
+          >
+            <Map :size="13" />
+          </button>
+        </VueFlow>
 
-        <!-- 快捷键帮助 -->
-        <teleport to="body">
-          <div v-if="helpOpen" class="canvas-help-backdrop" @click="helpOpen = false">
-            <div class="canvas-help" @click.stop>
-              <div class="canvas-help__title">画布快捷键与操作</div>
-              <div class="canvas-help__row">
-                <span>拖拽节点</span><span>调整位置（自动保存）</span>
-              </div>
-              <div class="canvas-help__row">
-                <span>拖拽节点边缘圆点</span><span>连线到目标节点（可拖动端点重连）</span>
-              </div>
-              <div class="canvas-help__row"><span>双击连线</span><span>删除连线</span></div>
-              <div class="canvas-help__row">
-                <span>双击便签</span><span>编辑内容（Enter 保存 / Esc 取消）</span>
-              </div>
-              <div class="canvas-help__row">
-                <span>右键节点</span><span>查看大图 / 下载 / 克隆 / 换色 / 删除</span>
-              </div>
-              <div class="canvas-help__row">
-                <span>右键空白处</span><span>在此处新建便签 / 导入图片</span>
-              </div>
-              <div class="canvas-help__row">
-                <span>Ctrl+V</span><span>粘贴剪贴板图片到画布</span>
-              </div>
-              <div class="canvas-help__row"><span>Shift + 拖拽</span><span>框选多个节点</span></div>
-              <div class="canvas-help__row">
-                <span>Delete</span><span>删除选中的节点/连线</span>
-              </div>
-              <div class="canvas-help__row">
-                <span>Ctrl+Z / Ctrl+Shift+Z</span><span>撤销 / 重做</span>
-              </div>
-              <div class="canvas-help__row">
-                <span>双击空白处</span><span>在该位置新建便签</span>
-              </div>
-              <button class="canvas-help__close" type="button" @click="helpOpen = false">
-                知道了
-              </button>
-            </div>
-          </div>
-        </teleport>
+        <!-- 顶部悬浮条（玻璃拟态） -->
+        <header class="canvas-topbar">
+          <span class="canvas-topbar__brand" />
+          <span class="canvas-topbar__title">工作记忆画布</span>
+          <span class="canvas-topbar__stats"
+            >{{ nodes.length }} 节点 · {{ edges.length }} 连线</span
+          >
+          <span class="canvas-topbar__spacer" />
+          <button
+            class="canvas-topbar__btn"
+            :class="{ 'canvas-topbar__btn--accent': immersive }"
+            type="button"
+            :title="immersive ? '退出全屏（恢复画布面板）' : '沉浸模式（全窗口画布）'"
+            @click="immersive = !immersive"
+          >
+            <Minimize2 v-if="immersive" :size="14" />
+            <Maximize2 v-else :size="14" />
+          </button>
+          <button class="canvas-topbar__btn" type="button" title="关闭画布" @click="emit('close')">
+            <X :size="14" />
+          </button>
+        </header>
 
-        <!-- 图片大图预览 -->
-        <teleport to="body">
-          <div v-if="lightboxUrl" class="canvas-lightbox" @click="lightboxUrl = null">
-            <img :src="lightboxUrl" alt="预览" />
-          </div>
-        </teleport>
-
-        <MiniMap
-          position="bottom-left"
-          :pannable="true"
-          :zoomable="true"
-          :node-color="(n: any) => getNodeColor(n.data?.nodeType)"
-          :mask-color="'rgb(15, 20, 30, 0.7)'"
-          class="canvas-minimap"
-        />
-      </VueFlow>
+        <!-- 底部工具 dock（tldraw 式，图标 + 悬停提示） -->
+        <div v-if="!loading && canvasId" class="canvas-dock">
+          <button
+            class="canvas-dock__btn"
+            :class="{ 'canvas-dock__btn--active': canvasTool === 'select' }"
+            type="button"
+            title="选择模式（V）：点击选中、拖拽移动"
+            @click="setTool('select')"
+          >
+            <MousePointer2 :size="16" />
+          </button>
+          <button
+            class="canvas-dock__btn"
+            :class="{ 'canvas-dock__btn--active': canvasTool === 'note' }"
+            type="button"
+            title="便签模式（N）：点击空白处创建便签，Esc 退出"
+            @click="setTool('note')"
+          >
+            <StickyNote :size="16" />
+          </button>
+          <button
+            class="canvas-dock__btn"
+            :class="{ 'canvas-dock__btn--active': canvasTool === 'image' }"
+            type="button"
+            title="图片模式（I）：点击空白处选择图片文件"
+            @click="setTool('image')"
+          >
+            <ImageIcon :size="16" />
+          </button>
+          <span class="canvas-dock__divider" />
+          <button
+            class="canvas-dock__btn"
+            type="button"
+            title="撤销（Ctrl+Z）"
+            :disabled="!canUndo"
+            @click="undo"
+          >
+            <Undo2 :size="16" />
+          </button>
+          <button
+            class="canvas-dock__btn"
+            type="button"
+            title="重做（Ctrl+Shift+Z）"
+            :disabled="!canRedo"
+            @click="redo"
+          >
+            <Redo2 :size="16" />
+          </button>
+          <span class="canvas-dock__divider" />
+          <button
+            class="canvas-dock__btn"
+            type="button"
+            title="自动整理（按类型分组）"
+            @click="autoArrange"
+          >
+            <AlignStartVertical :size="16" />
+          </button>
+          <button
+            class="canvas-dock__btn"
+            type="button"
+            :title="compactMode ? '详细模式' : '紧凑模式'"
+            @click="compactMode = !compactMode"
+          >
+            <Rows3 :size="16" />
+          </button>
+          <button
+            class="canvas-dock__btn"
+            type="button"
+            :title="`网格：${GRID_LABELS[gridMode]}（点击切换）`"
+            @click="cycleGrid"
+          >
+            <Grid3x3 :size="16" />
+          </button>
+          <span class="canvas-dock__divider" />
+          <button class="canvas-dock__btn" type="button" title="适应视图" @click="fitCanvas">
+            <Maximize :size="16" />
+          </button>
+          <button
+            class="canvas-dock__btn"
+            type="button"
+            title="导出画布 JSON"
+            @click="exportCanvasJson"
+          >
+            <Download :size="16" />
+          </button>
+          <button
+            class="canvas-dock__btn"
+            type="button"
+            title="快捷键说明"
+            @click="helpOpen = true"
+          >
+            <CircleHelp :size="16" />
+          </button>
+          <span class="canvas-dock__divider" />
+          <button
+            class="canvas-dock__btn canvas-dock__btn--danger"
+            type="button"
+            title="删除选中（Delete）"
+            :disabled="selectedCount === 0"
+            @click="deleteSelected"
+          >
+            <Trash2 :size="16" />
+          </button>
+        </div>
+      </div>
     </aside>
   </Transition>
 </template>
 
 <script lang="ts">
 function getNodeColor(type: string | undefined): string {
-  if (!type) return "#6b7280";
+  if (!type) return "#94a3b8";
   const colors: Record<string, string> = {
     fact: "#8b5cf6",
     note: "#3b82f6",
-    image: "#22c55e",
-    video: "#f59e0b",
-    document: "#06b6d4",
-    upload: "#ec4899",
+    image: "#6366f1",
+    video: "#38bdf8",
+    document: "#818cf8",
+    upload: "#a78bfa",
   };
-  return colors[type] || "#6b7280";
+  return colors[type] || "#94a3b8";
 }
 </script>
 
@@ -1113,21 +1118,29 @@ function getNodeColor(type: string | undefined): string {
 /* vue-flow 控件/选区/选中连线 暗色适配 */
 .memory-canvas-panel .vue-flow__controls {
   border: 1px solid rgb(255 255 255 / 8%);
-  background: rgb(16 20 30 / 88%);
-  backdrop-filter: blur(8px);
-  border-radius: var(--radius-control);
+  background: rgb(15 20 32 / 72%);
+  backdrop-filter: blur(12px);
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 25%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
 }
 
 .memory-canvas-panel .vue-flow__controls-button {
-  color: rgb(255 255 255 / 70%);
-  border-bottom: 1px solid var(--color-border-subtle);
+  width: 32px;
+  height: 32px;
+  color: rgb(255 255 255 / 85%);
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
   background: transparent;
 }
 
+.memory-canvas-panel .vue-flow__controls-button svg {
+  width: 17px;
+  height: 17px;
+  fill: currentcolor;
+}
+
 .memory-canvas-panel .vue-flow__controls-button:hover {
-  background: rgb(255 255 255 / 6%);
+  background: rgb(99 102 241 / 28%);
   color: #fff;
 }
 
@@ -1143,69 +1156,135 @@ function getNodeColor(type: string | undefined): string {
   filter: drop-shadow(0 0 4px rgb(129 140 248 / 50%));
 }
 
-.canvas-toolbar {
+/* 选中节点：细 ring + 柔光 */
+.memory-canvas .vue-flow__node.selected .canvas-node {
+  border-color: rgb(129 140 248 / 55%);
+  box-shadow:
+    0 0 0 1.5px rgb(129 140 248 / 90%),
+    0 0 24px rgb(129 140 248 / 28%),
+    0 10px 30px rgb(0 0 0 / 45%);
+}
+
+/* 拖拽中：仅阴影加深（不加 transform，避免逐帧位置更新与过渡插值打架造成卡顿） */
+.memory-canvas .vue-flow__node.dragging .canvas-node {
+  box-shadow: 0 14px 34px rgb(0 0 0 / 50%);
+}
+
+/* 提升节点为独立合成层，拖拽时位置更新不触发重排重绘 */
+.memory-canvas .vue-flow__node {
+  will-change: transform;
+}
+
+/* hover 连线时高亮其两端节点（Phase 4） */
+.memory-canvas .vue-flow__node.edge-endpoint-highlight .canvas-node {
+  box-shadow:
+    0 0 0 2px rgb(129 140 248 / 60%),
+    0 6px 20px rgb(0 0 0 / 45%);
+}
+
+/* 连接点可发现性：悬停节点时手柄放大 + 光圈，提示可拖拽连线 */
+.memory-canvas .vue-flow__handle {
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.memory-canvas .vue-flow__node:hover .vue-flow__handle {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 3px rgb(129 140 248 / 30%);
+  cursor: crosshair;
+}
+
+/* 新建连线的描线动画（Phase 4）：动画结束后恢复常规线型 */
+.memory-canvas .vue-flow__edge.edge-draw .vue-flow__edge-path {
+  animation: canvas-edge-draw 0.9s var(--ease-out, ease-out);
+}
+
+@keyframes canvas-edge-draw {
+  from {
+    stroke-dasharray: 240;
+    stroke-dashoffset: 240;
+  }
+  to {
+    stroke-dasharray: 240;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* 创建模式下的画布光标提示 */
+.memory-canvas--tool-note .vue-flow__pane,
+.memory-canvas--tool-image .vue-flow__pane {
+  cursor: crosshair;
+}
+
+/* ── 底部工具 dock（tldraw 式，玻璃拟态） ── */
+.canvas-dock {
   position: absolute;
-  top: 52px;
-  left: var(--space-3);
-  z-index: 10;
+  bottom: var(--space-4);
+  left: 50%;
+  z-index: 12;
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
-  box-shadow: 0 4px 12px rgb(0 0 0 / 25%);
+  padding: 5px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 14px;
+  background: rgb(13 18 30 / 80%);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  transform: translateX(-50%);
 }
 
-.canvas-toolbar__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 26px;
-  padding: 0 var(--space-2);
-  color: var(--color-text-secondary, var(--color-text));
+.canvas-dock__btn {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: var(--color-text-secondary, #cbd5f5);
   border: none;
-  border-radius: 6px;
+  border-radius: 9px;
   background: transparent;
-  font-size: 12px;
   cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.canvas-toolbar__btn:hover:not(:disabled) {
-  background: var(--color-surface-hover);
+.canvas-dock__btn:hover:not(:disabled) {
+  background: rgb(255 255 255 / 9%);
+  color: #fff;
 }
 
-.canvas-toolbar__btn:disabled {
-  opacity: 0.45;
+.canvas-dock__btn--active,
+.canvas-dock__btn--active:hover:not(:disabled) {
+  color: #fff;
+  background: var(--color-accent);
+  box-shadow: 0 2px 12px rgb(99 102 241 / 50%);
+}
+
+.canvas-dock__btn--danger:hover:not(:disabled) {
+  color: #f87171;
+  background: rgb(248 113 113 / 10%);
+}
+
+.canvas-dock__btn:disabled {
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
-.canvas-toolbar__btn--danger:hover:not(:disabled) {
-  color: #f87171;
-}
-
-.canvas-toolbar__divider {
+.canvas-dock__divider {
   width: 1px;
-  height: 16px;
-  margin: 0 2px;
-  background: var(--color-border-subtle);
-}
-
-.canvas-toolbar__count {
-  padding: 0 var(--space-2);
-  color: var(--color-text-tertiary);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  height: 20px;
+  margin: 0 4px;
+  background: rgb(255 255 255 / 10%);
 }
 
 .canvas-empty--overlay,
 .canvas-loading--overlay {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1214,45 +1293,6 @@ function getNodeColor(type: string | undefined): string {
   color: var(--color-text-tertiary);
   background: rgb(10 14 22 / 45%);
   pointer-events: none;
-}
-
-/* 节点右键菜单 / 空白右键菜单（teleport 到 body） */
-.canvas-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-}
-
-.canvas-menu {
-  position: fixed;
-  z-index: 101;
-  display: flex;
-  flex-direction: column;
-  min-width: 128px;
-  padding: 4px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
-  background: var(--color-surface);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
-}
-
-.canvas-menu__item {
-  padding: 6px 10px;
-  color: var(--color-text);
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  font-size: var(--text-footnote);
-  text-align: left;
-  cursor: pointer;
-}
-
-.canvas-menu__item:hover {
-  background: var(--color-surface-hover);
-}
-
-.canvas-menu__item--danger {
-  color: #f87171;
 }
 
 /* 快捷键帮助 */
@@ -1268,6 +1308,8 @@ function getNodeColor(type: string | undefined): string {
 .canvas-help {
   width: 460px;
   max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
   padding: var(--space-4) var(--space-5);
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
@@ -1280,6 +1322,15 @@ function getNodeColor(type: string | undefined): string {
   color: var(--color-text);
   font-size: 14px;
   font-weight: 600;
+}
+
+.canvas-help__section {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .canvas-help__row {
@@ -1328,11 +1379,13 @@ function getNodeColor(type: string | undefined): string {
 
 /* MiniMap 暗色适配：默认白底在深色主题下像一块游离的白板 */
 .canvas-minimap {
-  background: rgb(12 16 24 / 90%);
+  width: 160px;
+  height: 112px;
   border: 1px solid rgb(255 255 255 / 8%);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
-  backdrop-filter: blur(8px);
-  border-radius: 8px;
+  border-radius: 10px;
+  background: rgb(15 20 32 / 72%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  backdrop-filter: blur(10px);
   overflow: hidden;
 }
 
@@ -1371,30 +1424,133 @@ function getNodeColor(type: string | undefined): string {
   transform: translateY(8px);
 }
 
-/* Header */
-.canvas-header {
+/* ── 画布舞台：满铺，悬浮控件锚定于此 ── */
+.canvas-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 顶部悬浮条（玻璃拟态） */
+.canvas-topbar {
+  position: absolute;
+  top: var(--space-3);
+  left: 50%;
+  z-index: 12;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-surface-subtle);
-  flex-shrink: 0;
-}
-.canvas-header__title {
-  margin-right: auto;
-  font-size: 13px;
-  font-weight: 700;
-  color: rgb(255 255 255 / 90%);
-  letter-spacing: 0.01em;
+  max-width: calc(100% - var(--space-8));
+  padding: 6px 10px 6px 14px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 999px;
+  background: rgb(13 18 30 / 78%);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  transform: translateX(-50%);
 }
 
+.canvas-topbar__brand {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 8px rgb(99 102 241 / 80%);
+}
+
+.canvas-topbar__title {
+  color: rgb(255 255 255 / 92%);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.canvas-topbar__stats {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 6%);
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.canvas-topbar__spacer {
+  flex: 1;
+}
+
+.canvas-topbar__btn {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: var(--color-text-secondary, #cbd5f5);
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.canvas-topbar__btn:hover {
+  background: rgb(255 255 255 / 9%);
+  color: #fff;
+}
+
+.canvas-topbar__btn--accent {
+  color: #fff;
+  background: rgb(99 102 241 / 35%);
+}
+
+.canvas-topbar__btn--accent:hover {
+  background: rgb(99 102 241 / 55%);
+  color: #fff;
+}
 /* Loading */
 .canvas-loading {
   display: flex;
   align-items: center;
   justify-content: center;
   flex: 1;
+}
+
+/* 加载失败覆盖层（Phase 5 错误恢复） */
+.canvas-error-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: #f87171;
+  background: rgb(10 14 22 / 72%);
+  backdrop-filter: blur(4px);
+}
+.canvas-error-overlay__message {
+  max-width: 70%;
+  color: var(--color-text-secondary, var(--color-text));
+  font-size: 12px;
+  text-align: center;
+  word-break: break-all;
+}
+.canvas-error-overlay__retry {
+  height: 30px;
+  padding: 0 var(--space-5);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-accent);
+  font-size: 12px;
+  cursor: pointer;
+  transition: filter var(--duration-fast) var(--ease-out);
+}
+.canvas-error-overlay__retry:hover {
+  filter: brightness(1.1);
 }
 
 /* Empty */
@@ -1414,10 +1570,39 @@ function getNodeColor(type: string | undefined): string {
   opacity: 0.6;
 }
 
-/* Canvas fills remaining space */
 .memory-canvas {
-  flex: 1;
-  width: 100%;
+  position: absolute;
+  inset: 0;
+  /* 径向深度渐变：中心微亮，边缘沉下去 */
+  background: radial-gradient(1100px 720px at 50% 38%, #151c30 0%, #0d1220 55%, #0a0e19 100%);
+}
+
+/* 小地图隐藏/显示按钮 */
+.minimap-btn {
+  position: absolute;
+  z-index: 11;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: var(--color-text-secondary, #cbd5f5);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  background: rgb(12 16 24 / 88%);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.minimap-btn:hover {
+  opacity: 1;
+}
+.minimap-btn--hide {
+  left: 12px;
+  bottom: 128px;
+}
+.minimap-btn--show {
+  left: 12px;
+  bottom: 12px;
 }
 
 .is-spinning {

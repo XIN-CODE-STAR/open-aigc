@@ -7,9 +7,14 @@
  * - 摘要文字
  * - 状态徽标 (pending/generating/succeeded/failed)
  * - 图片类型可显示缩略图
+ * - 右下角 resize 手柄：拖拽改宽高，松手后经 onResize 持久化
+ * - 右键菜单统一交给父级（data.onContextMenu 上报坐标）
  */
-import { computed, ref } from "vue";
-import { Handle, Position } from "@vue-flow/core";
+import { computed, ref, watch } from "vue";
+import { Handle, Position, useVueFlow } from "@vue-flow/core";
+
+import { clampNodeSize } from "../canvasNodeSize";
+import { thumbnailFor } from "../imageCompress";
 
 const props = defineProps<{
   id: string;
@@ -20,37 +25,66 @@ const props = defineProps<{
     assetId?: string | null;
     /** 紧凑模式：只显示头部与摘要，隐藏缩略图与提示词。 */
     compact?: boolean;
+    /** 节点显式尺寸（来自 payload.size）；缺省高度由内容撑开。 */
+    size?: { width: number; height?: number };
+    /** 右键菜单统一由面板打开：上报屏幕坐标即可。 */
+    onContextMenu?: (clientX: number, clientY: number) => void;
+    /** 面板菜单触发「编辑」时的信号（递增计数）。 */
+    editSignal?: number;
     onDelete?: () => void;
     onSaveSummary?: (text: string) => void;
-    onMenuAction?: (action: "clone" | "preview" | "download" | "color" | "delete") => void;
+    /** 拖拽 resize 结束时回调；height 未拖动时为 undefined（保持自适应）。 */
+    onResize?: (width: number, height?: number) => void;
   };
 }>();
 
 const isNote = computed(() => props.data.nodeType === "note");
-const isImage = computed(() => props.data.nodeType === "image" || props.data.nodeType === "upload");
-const menuOpen = ref(false);
-const menuX = ref(0);
-const menuY = ref(0);
 
-function openMenu(event: MouseEvent): void {
-  menuX.value = event.clientX;
-  menuY.value = event.clientY;
-  menuOpen.value = true;
+const rootRef = ref<HTMLElement | null>(null);
+const { viewport } = useVueFlow();
+
+function onNodeContextMenu(event: MouseEvent): void {
+  props.data.onContextMenu?.(event.clientX, event.clientY);
 }
 
-function menuAction(action: "clone" | "preview" | "download" | "color" | "delete"): void {
-  menuOpen.value = false;
-  props.data.onMenuAction?.(action);
+/** resize 手柄拖拽：除以 zoom 换算回 flow 坐标，实时改节点 wrapper 尺寸，松手持久化。 */
+function startResize(event: PointerEvent): void {
+  const root = rootRef.value;
+  if (!root || !props.data.onResize) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  const wrapper = root.closest(".vue-flow__node") as HTMLElement | null;
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const startWidth = root.offsetWidth;
+  const startHeight = root.offsetHeight;
+  const zoom = viewport.value.zoom || 1;
+  let heightTouched = false;
+  let nextWidth = startWidth;
+  let nextHeight = startHeight;
+
+  const onMove = (moveEvent: PointerEvent): void => {
+    const dx = (moveEvent.clientX - startX) / zoom;
+    const dy = (moveEvent.clientY - startY) / zoom;
+    if (Math.abs(moveEvent.clientY - startY) > 4) heightTouched = true;
+    const size = clampNodeSize(startWidth + dx, heightTouched ? startHeight + dy : undefined);
+    nextWidth = size.width;
+    if (size.height !== undefined) nextHeight = size.height;
+    if (wrapper) {
+      wrapper.style.width = `${nextWidth}px`;
+      if (heightTouched) wrapper.style.height = `${nextHeight}px`;
+    }
+  };
+  const onUp = (): void => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    props.data.onResize?.(nextWidth, heightTouched ? nextHeight : undefined);
+  };
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
 }
 
-const hasImage = computed(() => {
-  try {
-    const p = JSON.parse(props.data.payloadJson);
-    return !!(p.dataUrl || p.imageUrl);
-  } catch {
-    return false;
-  }
-});
 const editing = ref(false);
 const editText = ref("");
 
@@ -59,6 +93,14 @@ function startEdit(): void {
   editText.value = props.data.summary;
   editing.value = true;
 }
+
+// 菜单里的「编辑」由面板经 editSignal 递增触发
+watch(
+  () => props.data.editSignal,
+  (value, previous) => {
+    if (value && value !== previous) startEdit();
+  },
+);
 
 function saveEdit(): void {
   if (!editing.value) return;
@@ -101,27 +143,16 @@ const thumbnailUrl = computed(() => {
 });
 
 const nodeColor = computed(() => {
+  // 蓝-紫-石板灰色系（与画布 accent 一致）
   const colors: Record<string, string> = {
     fact: "#8b5cf6",
     note: "#3b82f6",
-    image: "#22c55e",
-    video: "#f59e0b",
-    document: "#06b6d4",
-    upload: "#ec4899",
+    image: "#6366f1",
+    video: "#38bdf8",
+    document: "#818cf8",
+    upload: "#a78bfa",
   };
-  return colors[props.data.nodeType] || "#6b7280";
-});
-
-const nodeIcon = computed(() => {
-  const icons: Record<string, string> = {
-    fact: "📝",
-    note: "📋",
-    image: "🖼️",
-    video: "🎬",
-    document: "📄",
-    upload: "📎",
-  };
-  return icons[props.data.nodeType] || "📦";
+  return colors[props.data.nodeType] || "#94a3b8";
 });
 
 const statusLabel = computed(() => {
@@ -142,13 +173,67 @@ const showThumbnail = computed(() => {
     !thumbnailUrl.value.startsWith("pending://")
   );
 });
+
+const TYPE_LABELS: Record<string, string> = {
+  fact: "事实",
+  note: "便签",
+  image: "图片",
+  video: "视频",
+  document: "文档",
+  upload: "素材",
+};
+const typeLabel = computed(() => TYPE_LABELS[props.data.nodeType] ?? props.data.nodeType);
+
+/** 便签纸质感：payload.color 调色（缺省琥珀纸色）+ 细横纹纹理。 */
+const noteColor = computed(() => {
+  if (!isNote.value) return "#fbbf24";
+  try {
+    const color = JSON.parse(props.data.payloadJson).color;
+    return typeof color === "string" && color.startsWith("#") ? color : "#fbbf24";
+  } catch {
+    return "#fbbf24";
+  }
+});
+
+const rootStyle = computed(() => {
+  const style: Record<string, string> = {};
+  if (isNote.value) {
+    style.background = [
+      `linear-gradient(165deg, color-mix(in srgb, ${noteColor.value} 20%, var(--color-surface-subtle, #1a1f2e)), var(--color-surface-subtle, #1a1f2e) 72%)`,
+      "repeating-linear-gradient(0deg, rgb(255 255 255 / 2.5%) 0 1px, transparent 1px 3px)",
+    ].join(", ");
+  }
+  return style;
+});
+
+// Phase 5：大图渲染缩略图（Canvas 生成），小图直接用原图
+const displaySrc = ref<string | null>(null);
+let displaySrcToken = 0;
+
+async function resolveDisplaySrc(): Promise<void> {
+  const token = ++displaySrcToken;
+  const source = thumbnailUrl.value;
+  if (!source) {
+    displaySrc.value = null;
+    return;
+  }
+  const result = await thumbnailFor(source, `${props.id}:${source.length}`);
+  if (token === displaySrcToken) displaySrc.value = result;
+}
+
+watch(
+  () => props.data.payloadJson,
+  () => void resolveDisplaySrc(),
+  { immediate: true },
+);
 </script>
 
 <template>
   <div
+    ref="rootRef"
     class="canvas-node"
-    :style="{ borderTopColor: nodeColor }"
-    @contextmenu.stop.prevent="openMenu($event)"
+    :style="rootStyle"
+    @contextmenu.stop.prevent="onNodeContextMenu($event)"
   >
     <!-- Handles for edge connections -->
     <Handle type="target" :position="Position.Left" :style="{ background: nodeColor }" />
@@ -167,8 +252,7 @@ const showThumbnail = computed(() => {
 
     <!-- Header: icon + type -->
     <div class="canvas-node__header">
-      <span class="canvas-node__icon">{{ nodeIcon }}</span>
-      <span class="canvas-node__type" :style="{ color: nodeColor }">{{ data.nodeType }}</span>
+      <span class="canvas-node__type" :style="{ color: nodeColor }">{{ typeLabel }}</span>
       <span v-if="statusLabel" class="canvas-node__status" :class="`is-${status}`">
         {{ statusLabel }}
       </span>
@@ -177,57 +261,13 @@ const showThumbnail = computed(() => {
     <!-- Thumbnail (for image/upload nodes with dataUrl) -->
     <div v-if="showThumbnail" class="canvas-node__thumb">
       <img
-        :src="thumbnailUrl!"
+        :src="displaySrc ?? thumbnailUrl!"
         alt=""
+        loading="lazy"
+        decoding="async"
         @error="($event.target as HTMLImageElement).style.display = 'none'"
       />
     </div>
-
-    <teleport to="body">
-      <div
-        v-if="menuOpen"
-        class="canvas-menu-backdrop"
-        @click.stop="menuOpen = false"
-        @contextmenu.stop.prevent="menuOpen = false"
-      >
-        <div class="canvas-menu" :style="{ left: `${menuX}px`, top: `${menuY}px` }" @click.stop>
-          <button
-            v-if="isImage && hasImage"
-            class="canvas-menu__item"
-            type="button"
-            @click="menuAction('preview')"
-          >
-            查看大图
-          </button>
-          <button
-            v-if="isImage && hasImage"
-            class="canvas-menu__item"
-            type="button"
-            @click="menuAction('download')"
-          >
-            下载图片
-          </button>
-          <button
-            v-if="isNote"
-            class="canvas-menu__item"
-            type="button"
-            @click="menuAction('color')"
-          >
-            换个颜色
-          </button>
-          <button class="canvas-menu__item" type="button" @click="menuAction('clone')">
-            克隆节点
-          </button>
-          <button
-            class="canvas-menu__item canvas-menu__item--danger"
-            type="button"
-            @click="menuAction('delete')"
-          >
-            删除节点
-          </button>
-        </div>
-      </div>
-    </teleport>
 
     <!-- Note editing（双击便签编辑内容） -->
     <div v-if="isNote && editing" class="canvas-node__edit">
@@ -257,50 +297,66 @@ const showThumbnail = computed(() => {
     <div v-if="description && !prompt" class="canvas-node__prompt" :title="description">
       {{ description.slice(0, 60) }}{{ description.length > 60 ? "..." : "" }}
     </div>
+
+    <!-- Resize handle（右下角拖拽改宽高；拦截 mousedown/touchstart 避免 vue-flow 同时拖动节点） -->
+    <div
+      class="canvas-node__resize"
+      title="拖拽调整大小"
+      @pointerdown.stop="startResize($event)"
+      @mousedown.stop.prevent
+      @touchstart.stop
+    />
   </div>
 </template>
 
 <style scoped>
 .canvas-node {
   position: relative;
-}
-
-.canvas-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-}
-
-.canvas-menu {
-  position: fixed;
-  z-index: 101;
   display: flex;
   flex-direction: column;
-  min-width: 128px;
-  padding: 4px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
-  background: var(--color-surface);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  /* 宽高由 vue-flow 节点 wrapper 控制（含 resize 后的显式值），卡片填满即可 */
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 12px;
+  background: var(--color-surface-subtle, #1a1f2e);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.24);
+  padding: 10px 12px;
+  font-size: 12px;
+  cursor: grab;
+  /* 不过渡 transform：拖拽时 vue-flow 逐帧更新位置，过渡会造成视觉拖影/卡顿 */
+  transition:
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.canvas-node:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 
-.canvas-menu__item {
-  padding: 6px 10px;
-  color: var(--color-text);
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  font-size: var(--text-footnote);
-  text-align: left;
-  cursor: pointer;
+/* 右下角 resize 手柄 */
+.canvas-node__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  border-bottom-right-radius: 8px;
+  cursor: nwse-resize;
+  touch-action: none;
+  opacity: 0;
+  background: linear-gradient(
+    135deg,
+    transparent 0 46%,
+    var(--color-text-tertiary, #64748b) 46% 54%,
+    transparent 54% 64%,
+    var(--color-text-tertiary, #64748b) 64% 72%,
+    transparent 72%
+  );
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
-
-.canvas-menu__item:hover {
-  background: var(--color-surface-hover);
-}
-
-.canvas-menu__item--danger {
-  color: #f87171;
+.canvas-node:hover .canvas-node__resize {
+  opacity: 0.85;
 }
 
 .canvas-node__delete {
@@ -345,36 +401,18 @@ const showThumbnail = computed(() => {
   resize: vertical;
   outline: none;
 }
-.canvas-node {
-  min-width: 180px;
-  max-width: 260px;
-  border-top: 3px solid #6b7280;
-  border-radius: 8px;
-  background: var(--color-surface-subtle, #1a1f2e);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  padding: 10px 12px;
-  font-size: 12px;
-  cursor: grab;
-  transition: box-shadow 0.15s ease;
-}
-.canvas-node:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-}
 
 .canvas-node__header {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
-}
-.canvas-node__icon {
-  font-size: 14px;
+  flex-shrink: 0;
 }
 .canvas-node__type {
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   font-weight: 600;
+  letter-spacing: 0.08em;
 }
 .canvas-node__status {
   margin-left: auto;
@@ -401,7 +439,10 @@ const showThumbnail = computed(() => {
   background: rgba(239, 68, 68, 0.1);
 }
 
+/* 缩略图自适应：节点有显式高度时占满剩余空间，否则保持 16:10 */
 .canvas-node__thumb {
+  flex: 1 1 auto;
+  min-height: 0;
   margin: 6px -2px;
   border-radius: 4px;
   overflow: hidden;
@@ -413,16 +454,24 @@ const showThumbnail = computed(() => {
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.25s ease;
+}
+/* 图片节点 hover 缩放微动画 */
+.canvas-node:hover .canvas-node__thumb img {
+  transform: scale(1.045);
 }
 
 .canvas-node__summary {
+  flex-shrink: 1;
+  min-height: 0;
   color: var(--color-text, #e2e8f0);
   line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .canvas-node__prompt {
+  flex-shrink: 0;
   margin-top: 4px;
   color: var(--color-text-tertiary, #64748b);
   font-size: 11px;
