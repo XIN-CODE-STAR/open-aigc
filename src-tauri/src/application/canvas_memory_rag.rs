@@ -1930,7 +1930,7 @@ mod tests {
                     "[overview {} chars]
 {}",
                     ctx.chars().count(),
-                    &truncate_chars(&ctx, 600)
+                    truncate_chars(&ctx, 600)
                 ),
                 None => eprintln!("[overview: empty]"),
             }
@@ -1945,7 +1945,7 @@ mod tests {
                     "[retrieval {} chars]
 {}",
                     ctx.chars().count(),
-                    &truncate_chars(&ctx, 600)
+                    truncate_chars(&ctx, 600)
                 ),
                 None => eprintln!("[retrieval: no match]"),
             }
