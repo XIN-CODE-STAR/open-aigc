@@ -165,6 +165,78 @@ mod tests {
         assert!(parse_embeddings_response(body).is_err());
     }
 
+    /// 手动冒烟测试：用真实工作区凭据验证 /embeddings 端点可用性。
+    /// 运行：cargo test --lib manual_embedding_smoke -- --ignored --nocapture
+    /// 任何失败都意味着当前凭据不支持嵌入 → 检索自动降级为关键词（功能无损）。
+    #[test]
+    #[ignore = "manual smoke test against real credential"]
+    fn manual_embedding_smoke() {
+        use crate::adapters::sqlite::credential_repository::SqliteCredentialRepository;
+        use crate::ports::credential_repository::CredentialRepository;
+
+        let workspace = std::path::PathBuf::from(std::env::var("USERPROFILE").unwrap())
+            .join("AppData")
+            .join("Local")
+            .join("com.aigcstudio.desktop")
+            .join("workspace");
+        let db = workspace.join("aigc-studio.sqlite3");
+        let mut repo = SqliteCredentialRepository::open(&db).expect("open credential repo");
+        let all = repo.list().expect("list credentials");
+        let candidates: Vec<_> = all
+            .iter()
+            .filter(|c| c.enabled && !c.base_url.is_empty())
+            .collect();
+        eprintln!("enabled credentials: {}", candidates.len());
+        let mut succeeded = false;
+        // 按供应商尝试常见嵌入模型名
+        let model_candidates = [
+            "embedding-3",
+            "text-embedding-v3",
+            "text-embedding-v2",
+            "text-embedding-v1",
+        ];
+        for credential in candidates.iter().rev() {
+            let Ok(api_key) = repo.get_secret(&credential.credential_key) else {
+                continue;
+            };
+            if api_key.is_empty() {
+                continue;
+            }
+            for model in model_candidates {
+                let adapter = OpenAiCompatibleEmbeddingAdapter::new(
+                    credential.base_url.clone(),
+                    api_key.clone(),
+                    model.to_owned(),
+                );
+                eprintln!(
+                    "trying provider={} base_url={} model={model} ...",
+                    credential.provider_name, credential.base_url
+                );
+                match adapter.embed(&EmbeddingRequest {
+                    text: "城市夜景 赛博朋克".to_owned(),
+                    model: None,
+                    asset_id: None,
+                }) {
+                    Ok(result) => {
+                        eprintln!(
+                            "SUCCESS provider={} model={} dims={}",
+                            credential.provider_name,
+                            result.model,
+                            result.embedding.len()
+                        );
+                        succeeded = true;
+                        break;
+                    }
+                    Err(e) => eprintln!("FAILED: {e}"),
+                }
+            }
+            if succeeded {
+                break;
+            }
+        }
+        assert!(succeeded, "没有任何凭据的 /embeddings 端点可用");
+    }
+
     #[test]
     fn not_ready_without_credentials() {
         let adapter = OpenAiCompatibleEmbeddingAdapter::new(
