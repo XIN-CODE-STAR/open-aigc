@@ -103,3 +103,13 @@
 
 1. 读"现状盘点"列出的文件，输出一份 ≤30 行的现状确认（含你发现的与我描述不符之处）。
 2. 给出 P0 的实施清单，等我确认后动工。
+
+## 七、实施进度（随阶段同步维护）
+
+### P0 环境与通道打通 — 已完成（2026-09-19）
+
+- **ffmpeg sidecar**：`scripts/fetch-ffmpeg.mjs`（默认 BtbN GitHub GPL 构建，curl 优先以遵循本机代理，支持 `--zip/--url` 换源），产物部署在 `src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe`（已 gitignore）；`tauri.conf.json` 配置 `bundle.externalBin`；`detect_ffmpeg()` 回退链 = 可执行文件同目录 sidecar（存在 + ≥1MB 门禁）→ PATH。tauri dev/build 会自动把 sidecar 拷到 target 目录并随包分发。
+- **合成集成测试**：`composition_facade.rs` 两个真机测试（双视频拼接时长≈和、图片归一化时长≈声明值），时长断言直接解析 mp4 容器 moov/mvhd；缺 ffmpeg 自动跳过。
+- **三通道健康检查**：`scripts/channel-health.mjs`（默认只做免费检查，`--submit` 才提交最低档真实生成）；kling/seedance 经 `src/tests/channel_health.rs` 的 `#[ignore]` 冒烟测试复用 adapter（`node scripts/rust-test.mjs -- --ignored channel_health`），凭据只走环境变量。
+- **门禁修复**：`sequential_executor` 两个编排测试钉住 Mock 合成（`with_facade_mock_composite`）——sidecar 落地后 cargo test 会把 target/debug 注入测试 PATH 命中 ffmpeg，真实 CompositeSkill 过滤 mock 产物会让测试环境依赖化。
+- **验收状态**：`pnpm check` / `rust-test.mjs`（518 通过）/ `clippy -D warnings` 全绿；启动日志实证因运行中的旧实例占用 1421 端口未完成，下次应用启动确认应出现 `engine=ffmpeg` 且不再出现 mock composition。
