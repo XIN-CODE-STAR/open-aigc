@@ -8,6 +8,7 @@
 //! - SEEDANCE_API_KEY：火山方舟 API Key
 //! - 提交真实生成任务（计费真实发生）需额外设置 AIGC_CHANNEL_SUBMIT=1，
 //!   由 channel-health.mjs 的 --submit 注入；默认只跑免费的 health_check。
+//!
 //! 缺失对应环境变量时自动跳过，不视为失败。
 //!
 //! 即梦通道不走本文件：会话凭据在应用内管理，脚本直接探测本地代理
