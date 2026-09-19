@@ -16,7 +16,7 @@ use crate::{
     domain::{
         agent::{
             parse_plan_from_text, ChatMessage, ChatRequest, ConversationRecord, PlanDraft,
-            PlanRecord, PlanStep, PlanStepStatus, PLAN_MAX_ITERATIONS,
+            PlanRecord, PlanStep, PlanStepKind, PlanStepStatus, PLAN_MAX_ITERATIONS,
         },
         creative_plan::CreativePlan,
     },
@@ -181,6 +181,31 @@ impl PlanningEngine {
                 .flatten()
         });
 
+        // ── 单镜头视频快速路径（P1 / 技术决策 D7）──
+        // 非分镜的视频请求直接建 1 步视频任务：确定性、省掉 Director 与 LLM 规划
+        // 两次调用，并从机制上杜绝"擅自加镜头/混入图片步骤"。
+        // 分镜意图（多镜头）仍走 Director→Planner，由 P2 的分镜规划负责。
+        if wants_video(raw_user_content) && !has_image && !is_storyboard_request(raw_user_content) {
+            let secs = parse_video_duration_secs(raw_user_content);
+            let steps = build_single_shot_video_steps(user_content, secs);
+            let draft =
+                PlanDraft::try_new(conversation_id.to_owned(), user_content.to_owned(), steps)?;
+            let record = self.create_plan_from_draft(draft)?;
+            super::agent_service::emit_event(
+                app,
+                conversation_id,
+                AgentEvent::PlanCreated {
+                    conversation_id: conversation_id.to_owned(),
+                    plan: record.clone(),
+                },
+            );
+            eprintln!("[Planner] single-shot video fast path: 1 step");
+            return Ok(PlanningOutcome::Planned {
+                plan: record,
+                creative_plan: None,
+            });
+        }
+
         // Creative Director 分析：仅对创作类任务调用。
         // 注意用原始用户文本判定：图片分析注入的增强文本充满"海报/设计"等词，
         // 会让"去除二维码"这类简单修改请求被误判为创作任务而过度展开多镜头计划。
@@ -287,9 +312,20 @@ impl PlanningEngine {
             if has_image {
                 planning_prompt.push_str(
                     "
-
 [当前任务限制]
 用户上传了图片并要求修改图片。只创建图片生成步骤，不要创建视频生成步骤。
+",
+                );
+            }
+            // 视频意图约束（D7，镜像 has_image 做法）：覆盖 Director/Planner 失败
+            // 降级到通用规划的场景，防止视频请求被规划成图片步骤或擅自加镜头。
+            if wants_video(raw_user_content) && !has_image {
+                planning_prompt.push_str(
+                    "
+[当前任务限制]
+用户要求生成视频。只创建视频生成步骤（video_generation），不要创建图片生成步骤。
+单个视频请求只创建 1 个步骤，不要擅自增加镜头数。
+调用 video_generation 工具时通过 durationSeconds 传递时长（当前供应商支持 5 或 10 秒）。
 ",
                 );
             }
@@ -473,6 +509,78 @@ pub(crate) fn is_creative_task(message: &str, has_image: bool) -> bool {
     CREATIVE_KEYWORDS.iter().any(|kw| lower.contains(kw))
 }
 
+/// 判断用户消息是否要求生成视频（区别于图片等其它创作物）。
+pub(crate) fn wants_video(message: &str) -> bool {
+    const VIDEO_KEYWORDS: &[&str] = &["视频", "动画", "宣传片", "短片", "影片", "动起来", "mv"];
+    let lower = message.to_lowercase();
+    VIDEO_KEYWORDS.iter().any(|kw| lower.contains(kw))
+}
+
+/// 判断是否为分镜/多镜头意图：这类请求保留给 Director→Planner 出多镜头计划（P2）。
+pub(crate) fn is_storyboard_request(message: &str) -> bool {
+    const STORYBOARD_KEYWORDS: &[&str] = &[
+        "分镜",
+        "镜头",
+        "几段",
+        "分段",
+        "拆分",
+        "依次",
+        "画面切换",
+        "场景切换",
+    ];
+    STORYBOARD_KEYWORDS.iter().any(|kw| message.contains(kw))
+}
+
+/// 从消息中解析视频时长（秒），支持"5秒"/"5 秒"/"5s"；未提及返回 None。
+///
+/// 数字后必须紧跟单位（秒/s），避免把"5个镜头"误判为时长；
+/// 当前主流视频供应商（kling/seedance）单镜头支持 5/10 秒，钳制到该范围，
+/// 避免把不支持的时长提交到远端后被整单拒绝。
+pub(crate) fn parse_video_duration_secs(message: &str) -> Option<f32> {
+    let compact: String = message
+        .to_lowercase()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    let chars: Vec<char> = compact.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if !chars[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < chars.len() && chars[i].is_ascii_digit() {
+            i += 1;
+        }
+        // 数字后紧跟单位才视为时长
+        if matches!(chars.get(i), Some('秒') | Some('s')) {
+            let digits: String = chars[start..i].iter().collect();
+            if let Ok(value) = digits.parse::<f32>() {
+                return Some(value.clamp(1.0, 10.0));
+            }
+        }
+    }
+    None
+}
+
+/// 构造单镜头视频任务的执行步骤（快速路径，纯函数便于测试）。
+///
+/// 描述里显式携带时长，执行阶段的 LLM 会把它转成 video_generation
+/// 工具的 durationSeconds 参数。
+pub(crate) fn build_single_shot_video_steps(
+    prompt: &str,
+    duration_secs: Option<f32>,
+) -> Vec<PlanStep> {
+    let secs = duration_secs.unwrap_or(5.0);
+    vec![PlanStep {
+        index: 1,
+        description: format!("生成视频（{secs}秒）— {prompt}"),
+        status: PlanStepStatus::Pending,
+        kind: PlanStepKind::VideoGeneration,
+    }]
+}
+
 /// 检测规划响应是否为"直接回答"格式并提取回答内容。
 ///
 /// 约定：模型在首行输出 `[直接回答]` 标记，其后（可带全/半角冒号）为给学生的回答。
@@ -484,5 +592,60 @@ pub(crate) fn extract_direct_answer(content: &str) -> Option<String> {
         None
     } else {
         Some(answer.to_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::agent::PlanStepKind;
+
+    #[test]
+    fn test_wants_video_detection() {
+        assert!(wants_video("生成一段5秒的海浪视频"));
+        assert!(wants_video("做一支产品宣传片"));
+        assert!(wants_video("把这张图动起来")); // 无图片上下文时仅作意图判断
+        assert!(wants_video("来个 MG 动画"));
+        assert!(!wants_video("画一张海报"));
+        assert!(!wants_video("生成一只猫的图片"));
+    }
+
+    #[test]
+    fn test_storyboard_request_detection() {
+        // 分镜意图走 Director→Planner（P2），不进单镜头快速路径
+        assert!(is_storyboard_request("做一支30秒的宣传片，3个镜头"));
+        assert!(is_storyboard_request("按分镜脚本生成视频"));
+        assert!(is_storyboard_request("拆成几段画面"));
+        assert!(!is_storyboard_request("生成一段5秒的海浪视频"));
+    }
+
+    #[test]
+    fn test_parse_video_duration_secs() {
+        assert_eq!(
+            parse_video_duration_secs("生成一段5秒的海浪视频"),
+            Some(5.0)
+        );
+        assert_eq!(parse_video_duration_secs("生成 10 s 的视频"), Some(10.0));
+        assert_eq!(parse_video_duration_secs("5秒钟的浪潮"), Some(5.0));
+        // 无单位不当作时长（"5个镜头"是分镜信号不是时长）
+        assert_eq!(parse_video_duration_secs("做3个镜头的宣传片"), None);
+        // 超出供应商支持范围时钳制
+        assert_eq!(parse_video_duration_secs("生成30秒的视频"), Some(10.0));
+        assert_eq!(parse_video_duration_secs("0秒"), Some(1.0));
+        assert_eq!(parse_video_duration_secs("没有时长要求"), None);
+    }
+
+    #[test]
+    fn test_build_single_shot_video_steps() {
+        let steps = build_single_shot_video_steps("生成一段海浪视频", Some(5.0));
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].kind, PlanStepKind::VideoGeneration);
+        assert_eq!(steps[0].index, 1);
+        assert!(steps[0].description.contains("5秒"));
+        assert!(steps[0].description.contains("海浪"));
+
+        // 未提及时长时缺省 5 秒
+        let default_steps = build_single_shot_video_steps("海浪", None);
+        assert!(default_steps[0].description.contains("5秒"));
     }
 }

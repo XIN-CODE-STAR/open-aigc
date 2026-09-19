@@ -186,7 +186,7 @@ impl KlingVideoAdapter {
                     "prompt": request.prompt,
                     "negative_prompt": request.negative_prompt,
                     "cfg_scale": request.parameters.get("cfg_scale").and_then(|v| v.as_f64()).unwrap_or(0.5),
-                    "duration": request.parameters.get("duration").and_then(|v| v.as_str()).unwrap_or("5"),
+                    "duration": duration_param(request, "5"),
                     "mode": request.parameters.get("mode").and_then(|v| v.as_str()).unwrap_or("std"),
                 });
                 Ok((url, body))
@@ -197,7 +197,7 @@ impl KlingVideoAdapter {
                     "model_name": model,
                     "prompt": request.prompt,
                     "negative_prompt": request.negative_prompt,
-                    "duration": request.parameters.get("duration").and_then(|v| v.as_str()).unwrap_or("5"),
+                    "duration": duration_param(request, "5"),
                     "aspect_ratio": request.parameters.get("aspect_ratio").and_then(|v| v.as_str()).unwrap_or("16:9"),
                 });
                 Ok((url, body))
@@ -406,11 +406,7 @@ impl UnifiedProviderAdapter for KlingVideoAdapter {
                     .get("mode")
                     .and_then(|v| v.as_str())
                     .unwrap_or("std");
-                let duration = request
-                    .parameters
-                    .get("duration")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("5");
+                let duration = duration_param(request, "5");
                 let base = if mode == "pro" { 0.7 } else { 0.3 };
                 let factor = duration.parse::<f64>().unwrap_or(5.0) / 5.0;
                 Some(base * factor)
@@ -430,6 +426,16 @@ impl UnifiedProviderAdapter for KlingVideoAdapter {
 
 fn classify_kling_error(error: ureq::Error) -> ProviderError {
     ProviderError::Network(error.to_string())
+}
+
+/// 读取 duration 参数：工具链传数字、创意计划传字符串，两种来源都接受。
+/// 此前只读字符串，数字来源会被静默回落到默认值 5。
+fn duration_param(request: &UnifiedRequest, default: &str) -> String {
+    match request.parameters.get("duration") {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(serde_json::Value::Number(n)) => n.to_string(),
+        _ => default.to_owned(),
+    }
 }
 
 fn base64_encode(input: &str) -> String {

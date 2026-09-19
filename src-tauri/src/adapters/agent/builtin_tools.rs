@@ -197,7 +197,8 @@ impl AgentToolExecutor for BuiltinToolExecutor {
             ),
             ToolDefinition::function(
                 TOOL_VIDEO_GENERATION,
-                "提交一个视频生成任务到队列。任务以 pending 状态创建，由后端异步执行。返回任务 ID 和状态。",
+                "提交一个视频生成任务到队列。任务以 pending 状态创建，由后端异步执行。返回任务 ID 和状态。\
+                 即梦通道会同步返回视频 URL，此时请在回复中用 ![生成结果](视频URL) 展示给用户。",
                 serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -212,6 +213,10 @@ impl AgentToolExecutor for BuiltinToolExecutor {
                         "prompt": {
                             "type": "string",
                             "description": "视频生成提示词"
+                        },
+                        "durationSeconds": {
+                            "type": "number",
+                            "description": "视频时长（秒，可选）。当前供应商单镜头支持 5 或 10 秒，默认 5。从用户消息中的时长要求解析（如\"5秒\"）。"
                         }
                     },
                     "required": ["providerName", "modelName", "prompt"]
@@ -763,6 +768,15 @@ fn execute_generation(
         if let Some(image) = &reference_image {
             snapshot["reference_image_url"] = serde_json::Value::String(image.clone());
         }
+        // 视频时长随快照透传：build_unified_request 把整份快照放进
+        // UnifiedRequest.parameters，kling/seedance/即梦 adapter 各自按需读取。
+        if tool_name != TOOL_IMAGE_GENERATION {
+            if let Some(duration) = args.duration_seconds {
+                if let Some(number) = serde_json::Number::from_f64(duration) {
+                    snapshot["duration"] = serde_json::Value::Number(number);
+                }
+            }
+        }
         let request_snapshot = snapshot.to_string();
         let capability_str = capability.as_str();
         match submitter.submit_and_dispatch(
@@ -778,25 +792,23 @@ fn execute_generation(
                     "[AgentTool] submitted {} task={} attempt={} provider={}",
                     tool_name, record.id, attempt.id, provider_id
                 );
-                // jimeng 代理路径是同步的：immediate_result_url 就是真实图片 CDN URL。
-                // remote_job_id 格式为 "proxy:image:{url}" 或 "proxy:i2i:{url}"，
-                // 统一取 "http" 起始的真实 URL 传回给 LLM。
-                if tool_name == TOOL_IMAGE_GENERATION {
-                    gen_image_url = attempt
-                        .remote_job_id
-                        .as_deref()
-                        .and_then(|u| u.find("http").map(|pos| &u[pos..]))
-                        .map(|u| u.to_owned());
-                }
-                let image_url = attempt
+                // 同步路径（即梦代理）直接返回真实结果 URL：remote_job_id 形如
+                // "proxy:image:{url}" / "proxy:video:{url}"，统一取 "http" 起始部分。
+                // 图片与视频共用提取，前端按扩展名决定 <img>/<video> 渲染。
+                gen_image_url = attempt
                     .remote_job_id
                     .as_deref()
                     .and_then(|u| u.find("http").map(|pos| &u[pos..]))
                     .map(|u| u.to_owned());
-                let status_msg = if let Some(ref url) = image_url {
+                let status_msg = if let Some(ref url) = gen_image_url {
+                    let media_label = if tool_name == TOOL_IMAGE_GENERATION {
+                        "图片"
+                    } else {
+                        "视频"
+                    };
                     format!(
                         "已创建 {tool_name} 任务并提交到 {provider_id}。\
-                         图片已生成完成，URL: {url}\
+                         {media_label}已生成完成，URL: {url}\
                          \n请在回复中用 ![生成结果]({url}) 展示给用户。"
                     )
                 } else {
@@ -1884,6 +1896,10 @@ struct GenerationArgs {
     /// false 时忽略对话参考图，强制纯文生图。
     #[serde(rename = "useReferenceImage")]
     use_reference_image: Option<bool>,
+    /// 视频生成时长（秒）。仅 video_generation 使用；缺省由 Provider 决定（5）。
+    /// 当前主流供应商（kling/seedance）单镜头支持 5/10 秒。
+    #[serde(rename = "durationSeconds")]
+    duration_seconds: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]

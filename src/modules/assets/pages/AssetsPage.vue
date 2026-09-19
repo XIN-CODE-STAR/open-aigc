@@ -135,15 +135,93 @@ const columns: ColumnDef<AssetRecord>[] = [
         ]);
       }
       // 非图片资产
+      if (asset.assetKind !== "video") {
+        return h(
+          "div",
+          {
+            class: "asset-thumb-wrapper",
+          },
+          [
+            h("div", { class: "asset-icon-placeholder" }, h(Images, { size: 18 })),
+            h("div", { class: "asset-thumb-overlay" }, [
+              h("span", { class: "asset-thumb-name" }, asset.displayName),
+              h("div", { class: "asset-thumb-actions" }, [
+                h(
+                  "button",
+                  {
+                    class: "asset-thumb-btn",
+                    type: "button",
+                    title: "打开文件",
+                    onClick: (e: Event) => {
+                      e.stopPropagation();
+                      void openAssetFile(asset.id);
+                    },
+                  },
+                  h(ExternalLink, { size: 14 }),
+                ),
+                h(
+                  "button",
+                  {
+                    class: "asset-thumb-btn",
+                    type: "button",
+                    title: "打开文件所在目录",
+                    onClick: (e: Event) => {
+                      e.stopPropagation();
+                      void openAssetFolder(asset.id);
+                    },
+                  },
+                  h(FolderOpen, { size: 14 }),
+                ),
+              ]),
+            ]),
+          ],
+        );
+      }
+      // 视频资产：静音悬停预览，overlay 展示时长/分辨率（loadedmetadata 前端读取，不动库表）
+      let videoSrc = "";
+      try {
+        videoSrc = convertFileSrc(filePath);
+      } catch {
+        /* ignore */
+      }
       return h(
         "div",
         {
           class: "asset-thumb-wrapper",
+          onMouseenter: (e: Event) => {
+            (e.currentTarget as HTMLElement)
+              .querySelector("video")
+              ?.play()
+              .catch(() => undefined);
+          },
+          onMouseleave: (e: Event) => {
+            const el = (e.currentTarget as HTMLElement).querySelector("video");
+            if (el) {
+              el.pause();
+              el.currentTime = 0;
+            }
+          },
         },
         [
-          h("div", { class: "asset-icon-placeholder" }, h(Images, { size: 18 })),
+          h("video", {
+            src: videoSrc,
+            class: "asset-thumb",
+            muted: true,
+            loop: true,
+            playsinline: true,
+            preload: "metadata",
+            onLoadedmetadata: (e: Event) => {
+              const el = e.target as HTMLVideoElement;
+              if (!Number.isFinite(el.duration) || el.duration <= 0) return;
+              const min = Math.floor(el.duration / 60);
+              const sec = Math.round(el.duration % 60);
+              const size = el.videoWidth > 0 ? ` · ${el.videoWidth}×${el.videoHeight}` : "";
+              videoMeta.value[asset.id] = `${min}:${String(sec).padStart(2, "0")}${size}`;
+            },
+          }),
           h("div", { class: "asset-thumb-overlay" }, [
             h("span", { class: "asset-thumb-name" }, asset.displayName),
+            h("span", { class: "asset-video-meta" }, videoMeta.value[asset.id] ?? "视频"),
             h("div", { class: "asset-thumb-actions" }, [
               h(
                 "button",
@@ -252,6 +330,10 @@ const columns: ColumnDef<AssetRecord>[] = [
 
 // ── 受管文件根目录（由后端提供，用于构造资产完整路径） ──
 const managedFilesDir = ref("");
+
+// 视频元数据（时长/分辨率）：loadedmetadata 事件在前端读取，
+// 避免为展示信息动库表（下载链路的 duration 字段 P3 一并补齐）。
+const videoMeta = ref<Record<string, string>>({});
 
 watch(
   () => workspace.isReady,
@@ -810,6 +892,17 @@ button:disabled {
 .asset-thumb-actions {
   display: flex;
   gap: 4px;
+}
+
+.asset-video-meta {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 46px;
 }
 
 .asset-thumb-btn {

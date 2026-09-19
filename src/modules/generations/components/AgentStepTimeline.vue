@@ -120,6 +120,37 @@ function extractImageUrls(resultJson: string | null): string[] {
 }
 
 /**
+ * 从工具结果 JSON 提取视频 URL（video_generation 任务）。
+ * 同步通道（即梦代理）的 payload 带最终 URL；异步通道完成侧回填
+ * attempt.remoteJobId（proxy:video: 前缀）或 localAsset.filePath。
+ */
+function extractVideoUrls(resultJson: string | null): string[] {
+  if (!resultJson) return [];
+  try {
+    const data = JSON.parse(resultJson);
+    const urls: string[] = [];
+    if (typeof data.imageUrl === "string" && VIDEO_EXT.test(data.imageUrl)) {
+      urls.push(data.imageUrl);
+    }
+    const remoteId: string = data.attempt?.remoteJobId || "";
+    if (remoteId.startsWith("proxy:video:")) {
+      const url = remoteId.replace(/^proxy:video:/, "");
+      if (url.startsWith("http")) urls.push(url);
+    }
+    if (data.localAsset?.filePath) {
+      try {
+        urls.push(convertFileSrc(data.localAsset.filePath));
+      } catch {
+        // ignore
+      }
+    }
+    return urls;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * 解析用户消息内容。
  * 后端将含附件的消息存为 JSON：`{"images": [...], "text": "..."}`。
  * 纯文本消息直接返回。返回值拆开 text 与 images，避免 base64 出现在文字区。
@@ -150,11 +181,16 @@ function parseUserContent(raw: string | null): { text: string; images: string[] 
  * 将 data: URL 转为 blob: URL，解决部分 Webview 对 data URL 渲染的兼容问题。
  * 转换失败时回退到原始 data URL。
  */
+/** 视频扩展名：markdown 图片语法中带这些扩展名时渲染为 <video>（P1 视频闭环）。 */
+const VIDEO_EXT = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
+
 function renderContent(content: string): string {
-  return content.replace(
-    /!\[([^\]]*)\]\(([^)]+)\)/g,
-    '<img src="$2" alt="$1" style="max-width:100%;max-height:400px;border-radius:8px;margin:8px 0;display:block;object-fit:contain;" />',
-  );
+  return content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt: string, url: string) => {
+    if (VIDEO_EXT.test(url)) {
+      return `<video src="${url}" controls preload="metadata" style="max-width:100%;max-height:400px;border-radius:8px;margin:8px 0;display:block;"></video>`;
+    }
+    return `<img src="${url}" alt="${alt}" style="max-width:100%;max-height:400px;border-radius:8px;margin:8px 0;display:block;object-fit:contain;" />`;
+  });
 }
 
 function dataUrlToBlobUrl(dataUrl: string): string {
@@ -274,6 +310,15 @@ function handleImageError(event: Event) {
                 @dblclick="openImageWithSystemViewer(url)"
               />
             </template>
+            <!-- 生成结果视频预览 -->
+            <video
+              v-for="(url, idx) in extractVideoUrls(inv.resultJson)"
+              :key="'vid-' + idx"
+              :src="url"
+              controls
+              preload="metadata"
+              class="ai-video"
+            />
           </div>
 
           <!-- 助手消息底部：token 用量 -->
@@ -495,6 +540,15 @@ function handleImageError(event: Event) {
 
 .ai-image:hover {
   transform: scale(1.02);
+}
+
+.ai-video {
+  max-width: min(320px, 100%);
+  max-height: 320px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-subtle);
+  display: block;
+  background: var(--color-surface-subtle);
 }
 
 .conv-tokens {
