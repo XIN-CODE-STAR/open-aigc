@@ -1952,6 +1952,59 @@ mod tests {
         }
     }
 
+    /// 手动端到端：在真实工作区画布上执行 canvas_add_note 的后端路径
+    /// （与 Agent 工具完全相同的代码路径），并验证入库与自动连线。
+    /// 运行：cargo test --lib manual_canvas_add_note_real -- --ignored --nocapture
+    #[test]
+    #[ignore = "manual e2e against real workspace"]
+    fn manual_canvas_add_note_real() {
+        let workspace = std::path::PathBuf::from(std::env::var("USERPROFILE").unwrap())
+            .join("AppData")
+            .join("Local")
+            .join("com.aigcstudio.desktop")
+            .join("workspace");
+        // 最近创建的对话（其画布当前为空）
+        let connection =
+            rusqlite::Connection::open(workspace.join(DB_FILE)).expect("open workspace db");
+        let conversation_id: String = connection
+            .query_row(
+                "SELECT id FROM agent_conversations ORDER BY created_at DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("latest conversation");
+
+        let node_id = add_canvas_note(
+            &workspace,
+            &conversation_id,
+            200.0,
+            200.0,
+            "项目主线是暗色调科技感",
+        )
+        .expect("note creation");
+        eprintln!("note created: conversation={conversation_id} node={node_id}");
+
+        // 自动连线（与 execute_canvas_add_note 相同的后置动作）
+        let connected = auto_connect_related(&workspace, &conversation_id, &node_id, 3, None);
+        eprintln!("auto_connected: {connected}");
+
+        // 入库验证
+        let repo = SqliteMemoryCanvasRepository::open(&workspace.join(DB_FILE)).unwrap();
+        let canvas_id = find_canvas_id(&repo, &conversation_id).unwrap();
+        let nodes = repo.list_nodes(&canvas_id).unwrap();
+        let note = nodes.iter().find(|n| n.id == node_id).expect("note in db");
+        let payload: serde_json::Value = serde_json::from_str(&note.payload_json).unwrap();
+        assert_eq!(payload["text"], "项目主线是暗色调科技感");
+        assert_eq!(payload["source"], "agent");
+        assert_eq!(note.node_type, "note");
+        eprintln!(
+            "verified in db: type={} summary={:?} canvas_nodes={}",
+            note.node_type,
+            note.summary,
+            nodes.len()
+        );
+    }
+
     #[test]
     fn context_is_capped_at_max_chars() {
         let dir = tempfile::tempdir().unwrap();
