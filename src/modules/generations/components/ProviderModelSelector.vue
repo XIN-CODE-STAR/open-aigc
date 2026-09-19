@@ -418,6 +418,12 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
+/* 向下弹出的变体（欢迎页输入卡内使用） */
+.model-pop--bottom {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
 .model-pop-group-label {
   padding: 6px 10px 2px;
   font-size: 9px;

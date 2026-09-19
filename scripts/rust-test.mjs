@@ -115,14 +115,22 @@ function main() {
       process.exit(1);
     }
   }
+  // 透传额外参数给 cargo test，用于运行 #[ignore] 的真机测试，例如：
+  //   node scripts/rust-test.mjs -- --ignored channel_health --nocapture
+  // 无参数时保持默认行为不变（走常规门禁）。
+  const extraArgs = process.argv.slice(2);
+  if (extraArgs[0] === "--") extraArgs.shift();
+  const testArgs = [
+    "cargo",
+    "test",
+    "--manifest-path",
+    join("src-tauri", "Cargo.toml"),
+  ];
+  if (extraArgs.length > 0) {
+    testArgs.push("--", ...extraArgs);
+  }
   process.exit(
-    run("node", [
-      join(scriptDir, "run-with-rust-path.mjs"),
-      "cargo",
-      "test",
-      "--manifest-path",
-      join("src-tauri", "Cargo.toml"),
-    ]),
+    run("node", [join(scriptDir, "run-with-rust-path.mjs"), ...testArgs]),
   );
 }
 

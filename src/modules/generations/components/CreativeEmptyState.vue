@@ -23,8 +23,10 @@ import {
 } from "@lucide/vue";
 
 import type { CredentialRecord } from "../../../bridge/credentials";
+import type { ResourceAccountRecord } from "../../../bridge/resourceAccounts";
 import { projectDirName } from "../../../app/stores/projectDirectory";
 import CreationParameterBar from "./CreationParameterBar.vue";
+import ProviderModelSelector from "./ProviderModelSelector.vue";
 import MemoryStatusBadge from "./MemoryStatusBadge.vue";
 
 /** 创作模式项（原定义于 CreativeWorkspaceHeader，顶部栏移除后迁移至此）。 */
@@ -70,6 +72,10 @@ const props = defineProps<{
   credentials: CredentialRecord[];
   /** 当前选中的凭据 id。 */
   selectedCredentialId: string;
+  /** 资源账号列表（jimeng 等）。 */
+  resourceAccounts?: ResourceAccountRecord[];
+  /** 当前选中的资源账号 id。 */
+  selectedAccountId?: string;
   /** 创作参数：比例。 */
   aspectRatio: string;
   /** 创作参数：时长。 */
@@ -101,6 +107,7 @@ const emit = defineEmits<{
   "update:creation-mode": [value: string];
   "update:show-mode-menu": [value: boolean];
   "select-credential": [id: string];
+  "select-account": [id: string];
   "update:aspect-ratio": [value: string];
   "update:video-duration": [value: string];
   "update:resolution": [value: string];
@@ -275,20 +282,43 @@ function pickExample(example: ExamplePrompt): void {
         </template>
       </div>
 
-      <!-- 居中输入框 -->
+      <!-- 居中输入框：输入行 + 底部工具行（模型选择） -->
       <div class="welcome__prompt" :class="{ 'is-dragover': isDragging }">
-        <textarea
-          class="welcome__input"
-          :value="promptText"
-          :placeholder="isDragging ? '松开以添加参考图片…' : placeholder"
-          rows="1"
-          :disabled="isSending"
-          @input="onInput"
-          @keydown="onKeydown"
-        />
-        <button type="button" class="welcome__send-btn" :disabled="!canSend" @click="onSend">
-          <Send :size="16" />
-        </button>
+        <div class="welcome__prompt-main">
+          <textarea
+            class="welcome__input"
+            :value="promptText"
+            :placeholder="isDragging ? '松开以添加参考图片…' : placeholder"
+            rows="1"
+            :disabled="isSending"
+            @input="onInput"
+            @keydown="onKeydown"
+          />
+          <button type="button" class="welcome__send-btn" :disabled="!canSend" @click="onSend">
+            <Send :size="16" />
+          </button>
+        </div>
+        <div class="welcome__input-toolbar">
+          <ProviderModelSelector
+            :credentials="credentials"
+            :selected-credential-id="selectedCredentialId"
+            :resource-accounts="resourceAccounts"
+            :selected-account-id="selectedAccountId"
+            :task-type="
+              creationMode === 'video'
+                ? 'video_generation'
+                : creationMode === 'image'
+                  ? 'image_generation'
+                  : undefined
+            "
+            :source-label="
+              creationMode === 'image' || creationMode === 'video' ? '生成来源' : undefined
+            "
+            pop-placement="bottom"
+            @select="(id: string) => emit('select-credential', id)"
+            @select-account="(id: string) => emit('select-account', id)"
+          />
+        </div>
       </div>
 
       <!-- 拖拽提示（输入框下方） -->
@@ -671,12 +701,13 @@ function pickExample(example: ExamplePrompt): void {
 /* —— 输入框容器 —— */
 .welcome__prompt {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   width: 100%;
   max-width: 780px;
   min-height: 52px;
-  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
+  gap: 2px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-surface);
   background: var(--color-surface);
@@ -693,6 +724,20 @@ function pickExample(example: ExamplePrompt): void {
   border-color: var(--color-accent);
   border-style: dashed;
   background: var(--color-accent-soft);
+}
+
+/* 输入主行：textarea + 发送按钮（保持原横向布局） */
+.welcome__prompt-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* 底部工具行：模型选择器 */
+.welcome__input-toolbar {
+  display: flex;
+  align-items: center;
+  padding-right: var(--space-1);
 }
 
 /* —— 输入框 —— */

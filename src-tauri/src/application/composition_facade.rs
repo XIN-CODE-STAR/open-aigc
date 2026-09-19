@@ -337,4 +337,205 @@ mod tests {
         let result = facade.compose(&request).unwrap();
         assert_eq!(result.duration_secs, 0.0);
     }
+
+    // ─── 真机合成测试（P0.2）───
+    //
+    // 依赖 ffmpeg（sidecar 或 PATH），缺失时跳过。部署命令：
+    // node scripts/fetch-ffmpeg.mjs
+    //
+    // 夹具与校验刻意全部经由 FfmpegCompositionFacade 自身完成：
+    // 图片夹具用 image crate 落 PNG，片段通过 normalize 分支生成，
+    // 时长断言直接解析 mp4 容器（moov/mvhd），测试代码不新增进程调用。
+
+    /// 集成测试用 ffmpeg 定位：运行时探测（sidecar/PATH）→ 仓库 binaries/ 目录。
+    /// cargo test 的可执行文件在 target/debug/deps，探测不到尚未被
+    /// tauri dev/build 复制的 sidecar，因此补 CARGO_MANIFEST_DIR/binaries 回退
+    /// （fetch-ffmpeg.mjs 的部署位置）。
+    fn test_ffmpeg_path() -> Option<String> {
+        if let Some(path) = crate::application::composite_skill::detect_ffmpeg() {
+            return Some(path);
+        }
+        let candidate = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("binaries")
+            .join(format!(
+                "ffmpeg-x86_64-pc-windows-msvc{}",
+                std::env::consts::EXE_SUFFIX
+            ));
+        if crate::application::composite_skill::looks_like_ffmpeg_binary(&candidate) {
+            return Some(candidate.to_string_lossy().to_string());
+        }
+        None
+    }
+
+    /// 生成纯色 PNG 夹具。
+    fn write_solid_png(path: &Path, rgb: [u8; 3]) {
+        image::RgbImage::from_pixel(320, 240, image::Rgb(rgb))
+            .save(path)
+            .expect("PNG 夹具写入失败");
+    }
+
+    /// 从 mp4 的 moov/mvhd box 读取实际时长（秒）。
+    /// concat -c copy 的产物时长应等于各输入容器时长之和；
+    /// 直接读容器元数据而不是信任 facade 的估算值。
+    fn mp4_duration_secs(path: &Path) -> Option<f64> {
+        let data = std::fs::read(path).ok()?;
+        let mut i = 0usize;
+        while i + 8 <= data.len() {
+            let size = u32::from_be_bytes(data[i..i + 4].try_into().ok()?) as usize;
+            let box_type = &data[i + 4..i + 8];
+            let (body_start, total) = if size == 0 {
+                (i + 8, data.len() - i)
+            } else {
+                (i + 8, size)
+            };
+            if total < 8 || i + total > data.len() {
+                return None;
+            }
+            if box_type == b"moov" {
+                let moov_end = i + total;
+                let mut j = body_start;
+                while j + 8 <= moov_end {
+                    let s2 = u32::from_be_bytes(data[j..j + 4].try_into().ok()?) as usize;
+                    let t2 = &data[j + 4..j + 8];
+                    let (b2, tot2) = if s2 == 0 {
+                        (j + 8, moov_end - j)
+                    } else {
+                        (j + 8, s2)
+                    };
+                    if tot2 < 32 || j + tot2 > moov_end {
+                        return None;
+                    }
+                    if t2 == b"mvhd" {
+                        let version = data[b2];
+                        if version == 1 {
+                            // v1: version/flags(4) ctime(8) mtime(8) timescale(4) duration(8)
+                            let ts =
+                                u32::from_be_bytes(data[b2 + 20..b2 + 24].try_into().ok()?) as f64;
+                            let dur =
+                                u64::from_be_bytes(data[b2 + 24..b2 + 32].try_into().ok()?) as f64;
+                            return if ts > 0.0 { Some(dur / ts) } else { None };
+                        }
+                        // v0: version/flags(4) ctime(4) mtime(4) timescale(4) duration(4)
+                        let ts = u32::from_be_bytes(data[b2 + 12..b2 + 16].try_into().ok()?) as f64;
+                        let dur =
+                            u32::from_be_bytes(data[b2 + 16..b2 + 20].try_into().ok()?) as f64;
+                        return if ts > 0.0 { Some(dur / ts) } else { None };
+                    }
+                    j += tot2;
+                }
+                return None;
+            }
+            i += total;
+        }
+        None
+    }
+
+    #[test]
+    fn test_ffmpeg_compose_two_video_clips_real() {
+        let ffmpeg = match test_ffmpeg_path() {
+            Some(p) => p,
+            None => {
+                eprintln!("skip: 未检测到 ffmpeg，先运行 scripts/fetch-ffmpeg.mjs 部署 sidecar");
+                return;
+            }
+        };
+        let dir = std::env::temp_dir().join(format!("aigc_compose_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir_str = dir.to_string_lossy().to_string();
+        let facade = FfmpegCompositionFacade::new(ffmpeg);
+
+        // 夹具：两张纯色图经 normalize 分支生成同规格 mp4 片段（2s / 3s）。
+        // 同一 facade、同一转码参数 → concat -c copy 可行。
+        let make_clip = |name: &str, rgb: [u8; 3], secs: f64| {
+            let png = dir.join(format!("{name}.png"));
+            write_solid_png(&png, rgb);
+            facade
+                .compose(&CompositionRequest {
+                    inputs: vec![MediaInput {
+                        file_path: png.to_string_lossy().to_string(),
+                        asset_type: AssetType::Image,
+                        duration_secs: secs,
+                    }],
+                    output_dir: dir_str.clone(),
+                    output_filename: format!("{name}.mp4"),
+                })
+                .expect("夹具片段生成应成功")
+        };
+        make_clip("clip1", [180, 40, 40], 2.0);
+        make_clip("clip2", [40, 40, 180], 3.0);
+        let clip1 = dir.join("clip1.mp4");
+        let clip2 = dir.join("clip2.mp4");
+        assert!(clip1.exists() && clip2.exists());
+
+        // 被测路径：两个视频输入的 concat 拼接
+        let output = facade
+            .compose(&CompositionRequest {
+                inputs: vec![
+                    MediaInput {
+                        file_path: clip1.to_string_lossy().to_string(),
+                        asset_type: AssetType::Video,
+                        duration_secs: 2.0,
+                    },
+                    MediaInput {
+                        file_path: clip2.to_string_lossy().to_string(),
+                        asset_type: AssetType::Video,
+                        duration_secs: 3.0,
+                    },
+                ],
+                output_dir: dir_str.clone(),
+                output_filename: "final.mp4".to_owned(),
+            })
+            .expect("真实 ffmpeg 合成应成功");
+
+        assert!(output.file_size > 0, "合成产物不应为空文件");
+        let final_path = Path::new(&output.file_path);
+        assert!(final_path.exists(), "合成产物应落盘: {}", output.file_path);
+        let real = mp4_duration_secs(final_path).expect("应能从 mp4 容器解析出实际时长");
+        assert!(
+            (real - 5.0).abs() < 0.5,
+            "拼接产物实际时长 {real}s 应≈两段之和 5s"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_ffmpeg_compose_image_input_real() {
+        let ffmpeg = match test_ffmpeg_path() {
+            Some(p) => p,
+            None => {
+                eprintln!("skip: 未检测到 ffmpeg，先运行 scripts/fetch-ffmpeg.mjs 部署 sidecar");
+                return;
+            }
+        };
+        let dir = std::env::temp_dir().join(format!("aigc_compose_img_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let image = dir.join("still.png");
+        write_solid_png(&image, [40, 160, 90]);
+
+        // 被测路径：图片输入走 normalize_to_mp4（-loop 1 -t duration）
+        let facade = FfmpegCompositionFacade::new(ffmpeg);
+        let output = facade
+            .compose(&CompositionRequest {
+                inputs: vec![MediaInput {
+                    file_path: image.to_string_lossy().to_string(),
+                    asset_type: AssetType::Image,
+                    duration_secs: 2.0,
+                }],
+                output_dir: dir.to_string_lossy().to_string(),
+                output_filename: "final.mp4".to_owned(),
+            })
+            .expect("图片归一化合成应成功");
+
+        assert!(output.file_size > 0, "合成产物不应为空文件");
+        let real =
+            mp4_duration_secs(Path::new(&output.file_path)).expect("应能从 mp4 容器解析出实际时长");
+        assert!(
+            (real - 2.0).abs() < 0.5,
+            "图片归一化产物实际时长 {real}s 应≈声明的 2s"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

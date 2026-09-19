@@ -10,6 +10,7 @@
 //!
 //! Future: async worker for long-running composition
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::{
@@ -155,10 +156,18 @@ impl ExecutionSkill for CompositeSkill {
 
 // ─── FFmpeg Detection ───
 
-/// 检测系统中是否安装了 ffmpeg。
+/// 检测系统中可用的 ffmpeg。
 ///
-/// 尝试执行 `ffmpeg -version`，成功则返回 ffmpeg 路径。
+/// 探测顺序（技术决策 D2）：应用可执行文件同目录的 sidecar
+/// （tauri externalBin 随应用分发的 `ffmpeg-<target-triple>.exe`）→ PATH。
+/// sidecar 候选只做"存在 + 体积"门禁而不额外起进程探测：
+/// 部署时 fetch-ffmpeg.mjs 已做过 `-version`/libx264 冒烟，
+/// 运行期的坏文件会在首次 compose 时以明确错误暴露。
+/// 返回 None 时由调用方降级（mock 合成 / 不注册 Composite skill）。
 pub(crate) fn detect_ffmpeg() -> Option<String> {
+    if let Some(path) = detect_ffmpeg_sidecar() {
+        return Some(path);
+    }
     std::process::Command::new("ffmpeg")
         .arg("-version")
         .stdout(std::process::Stdio::null())
@@ -167,6 +176,38 @@ pub(crate) fn detect_ffmpeg() -> Option<String> {
         .ok()
         .filter(|s| s.success())
         .map(|_| "ffmpeg".to_owned())
+}
+
+/// 在可执行文件同目录探测 ffmpeg sidecar。
+fn detect_ffmpeg_sidecar() -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    ffmpeg_sidecar_candidates(dir)
+        .into_iter()
+        .find(|p| looks_like_ffmpeg_binary(p))
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+/// sidecar 候选路径（按优先级）：externalBin 约定命名 → 手工放置的裸名。
+/// 纯函数，便于单测。
+fn ffmpeg_sidecar_candidates(dir: &Path) -> Vec<PathBuf> {
+    let suffix = std::env::consts::EXE_SUFFIX;
+    vec![
+        dir.join(format!("ffmpeg-x86_64-pc-windows-msvc{suffix}")),
+        dir.join(format!("ffmpeg{suffix}")),
+    ]
+}
+
+/// 静态构建的 ffmpeg 二进制约 100MB；1MB 门禁足以排除占位文件与截断残留。
+/// （共享构建的数百 KB exe + DLL 是另一种分发形态，不进 sidecar 约定。）
+const FFMPEG_MIN_BYTES: u64 = 1024 * 1024;
+
+/// 判断候选路径是否像一份 ffmpeg 部署产物（供探测链与测试复用）。
+pub(crate) fn looks_like_ffmpeg_binary(path: &Path) -> bool {
+    match std::fs::metadata(path) {
+        Ok(meta) => meta.is_file() && meta.len() >= FFMPEG_MIN_BYTES,
+        Err(_) => false,
+    }
 }
 
 // ─── Tests ───
@@ -307,11 +348,37 @@ mod tests {
 
     #[test]
     fn test_detect_ffmpeg() {
-        // 环境依赖测试：可能通过也可能失败
-        let result = super::detect_ffmpeg();
-        // 不做断言，只确保不 panic
-        if let Some(path) = result {
-            assert_eq!(path, "ffmpeg");
+        // 环境依赖测试：sidecar 或 PATH 任一命中即可，两者皆无时返回 None。
+        // 只确保不 panic 且非空，不锁定具体命中来源。
+        if let Some(path) = super::detect_ffmpeg() {
+            assert!(!path.is_empty());
         }
+    }
+
+    #[test]
+    fn test_ffmpeg_sidecar_candidates_order() {
+        let dir = PathBuf::from("/app");
+        let candidates = super::ffmpeg_sidecar_candidates(&dir);
+        assert_eq!(candidates.len(), 2);
+
+        let suffix = std::env::consts::EXE_SUFFIX;
+        // 首选 externalBin 约定命名（tauri 会把 sidecar 复制到可执行文件旁）
+        assert_eq!(
+            candidates[0].file_name().unwrap().to_string_lossy(),
+            format!("ffmpeg-x86_64-pc-windows-msvc{suffix}")
+        );
+        // 次选裸名，作为手工放置的兼容入口
+        assert_eq!(
+            candidates[1].file_name().unwrap().to_string_lossy(),
+            format!("ffmpeg{suffix}")
+        );
+    }
+
+    #[test]
+    fn test_looks_like_ffmpeg_binary_rejects_placeholder() {
+        let path = std::env::temp_dir().join(format!("aigc_ffmpeg_probe_{}", uuid::Uuid::new_v4()));
+        std::fs::write(&path, b"placeholder").unwrap();
+        assert!(!super::looks_like_ffmpeg_binary(&path));
+        let _ = std::fs::remove_file(&path);
     }
 }
