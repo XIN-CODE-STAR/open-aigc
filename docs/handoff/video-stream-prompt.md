@@ -113,3 +113,13 @@
 - **三通道健康检查**：`scripts/channel-health.mjs`（默认只做免费检查，`--submit` 才提交最低档真实生成）；kling/seedance 经 `src/tests/channel_health.rs` 的 `#[ignore]` 冒烟测试复用 adapter（`node scripts/rust-test.mjs -- --ignored channel_health`），凭据只走环境变量。
 - **门禁修复**：`sequential_executor` 两个编排测试钉住 Mock 合成（`with_facade_mock_composite`）——sidecar 落地后 cargo test 会把 target/debug 注入测试 PATH 命中 ffmpeg，真实 CompositeSkill 过滤 mock 产物会让测试环境依赖化。
 - **验收状态**：`pnpm check` / `rust-test.mjs`（518 通过）/ `clippy -D warnings` 全绿；启动日志实证因运行中的旧实例占用 1421 端口未完成，下次应用启动确认应出现 `engine=ffmpeg` 且不再出现 mock composition。
+
+### P1 单镜头视频闭环 — 代码完成（2026-09-19，待真机验收）
+
+- **CSP**：csp/devCsp 补 `media-src`（asset.localhost + blob），`<video>` 播放不再被 default-src 拦截。
+- **时长透传**：`video_generation` 工具新增 `durationSeconds`，随请求快照落入 `UnifiedRequest.parameters`；kling adapter 的 duration 兼容字符串/数字两种来源（修复数字被静默回落 5s 的隐患）。
+- **单镜头快速路径（D7）**：`planning_engine` 新增 `wants_video`/`is_storyboard_request`/`parse_video_duration_secs`（钳制 1-10s，数字后必须带单位防止"5个镜头"误判）。非分镜视频请求直接建 1 步 VideoGeneration 计划（跳过 Director/LLM 规划）；分镜请求维持 Director→Planner；通用规划降级路径注入视频约束（只建视频步骤、1 步、传 durationSeconds）。
+- **前端渲染**：AgentStepTimeline 的 markdown 视频扩展名（mp4/webm/mov/m4v）渲染 `<video controls>`；结果区提取 proxy:video:/localAsset 视频 URL；资产库视频卡片静音悬停预览 + loadedmetadata 读时长/分辨率（不动库表）。
+- **导出链**：`generation_pipeline` Stage 3b 按类型无差别导出，无需改动，video 尝试自动落 `generated/<对话标题>/`。
+- **门禁**：`pnpm check` / `rust-test.mjs`（524 通过，含 4 个新规划测试）/ `clippy -D warnings` 全绿。
+- **待真机验收**：应用内输入"生成一段 5 秒的海浪视频"→ 对话内可播放 → 资产库可见 → 工作目录有 mp4（需要已配置的视频凭据，计费真实发生）。
