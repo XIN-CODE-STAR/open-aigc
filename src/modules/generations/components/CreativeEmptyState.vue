@@ -282,43 +282,20 @@ function pickExample(example: ExamplePrompt): void {
         </template>
       </div>
 
-      <!-- 居中输入框：输入行 + 底部工具行（模型选择） -->
+      <!-- 居中输入框 -->
       <div class="welcome__prompt" :class="{ 'is-dragover': isDragging }">
-        <div class="welcome__prompt-main">
-          <textarea
-            class="welcome__input"
-            :value="promptText"
-            :placeholder="isDragging ? '松开以添加参考图片…' : placeholder"
-            rows="1"
-            :disabled="isSending"
-            @input="onInput"
-            @keydown="onKeydown"
-          />
-          <button type="button" class="welcome__send-btn" :disabled="!canSend" @click="onSend">
-            <Send :size="16" />
-          </button>
-        </div>
-        <div class="welcome__input-toolbar">
-          <ProviderModelSelector
-            :credentials="credentials"
-            :selected-credential-id="selectedCredentialId"
-            :resource-accounts="resourceAccounts"
-            :selected-account-id="selectedAccountId"
-            :task-type="
-              creationMode === 'video'
-                ? 'video_generation'
-                : creationMode === 'image'
-                  ? 'image_generation'
-                  : undefined
-            "
-            :source-label="
-              creationMode === 'image' || creationMode === 'video' ? '生成来源' : undefined
-            "
-            pop-placement="bottom"
-            @select="(id: string) => emit('select-credential', id)"
-            @select-account="(id: string) => emit('select-account', id)"
-          />
-        </div>
+        <textarea
+          class="welcome__input"
+          :value="promptText"
+          :placeholder="isDragging ? '松开以添加参考图片…' : placeholder"
+          rows="1"
+          :disabled="isSending"
+          @input="onInput"
+          @keydown="onKeydown"
+        />
+        <button type="button" class="welcome__send-btn" :disabled="!canSend" @click="onSend">
+          <Send :size="16" />
+        </button>
       </div>
 
       <!-- 拖拽提示（输入框下方） -->
@@ -370,6 +347,29 @@ function pickExample(example: ExamplePrompt): void {
             </button>
           </div>
         </Transition>
+
+        <!-- 模型 / 生成来源选择（输入卡外，模式行内） -->
+        <span class="welcome__model-wrap">
+          <ProviderModelSelector
+            :credentials="credentials"
+            :selected-credential-id="selectedCredentialId"
+            :resource-accounts="resourceAccounts"
+            :selected-account-id="selectedAccountId"
+            :task-type="
+              creationMode === 'video'
+                ? 'video_generation'
+                : creationMode === 'image'
+                  ? 'image_generation'
+                  : undefined
+            "
+            :source-label="
+              creationMode === 'image' || creationMode === 'video' ? '生成来源' : undefined
+            "
+            pop-placement="bottom"
+            @select="(id: string) => emit('select-credential', id)"
+            @select-account="(id: string) => emit('select-account', id)"
+          />
+        </span>
       </div>
     </div>
 
@@ -701,13 +701,12 @@ function pickExample(example: ExamplePrompt): void {
 /* —— 输入框容器 —— */
 .welcome__prompt {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   width: 100%;
   max-width: 780px;
   min-height: 52px;
-  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
-  gap: 2px;
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  gap: var(--space-2);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-surface);
   background: var(--color-surface);
@@ -724,20 +723,6 @@ function pickExample(example: ExamplePrompt): void {
   border-color: var(--color-accent);
   border-style: dashed;
   background: var(--color-accent-soft);
-}
-
-/* 输入主行：textarea + 发送按钮（保持原横向布局） */
-.welcome__prompt-main {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* 底部工具行：模型选择器 */
-.welcome__input-toolbar {
-  display: flex;
-  align-items: center;
-  padding-right: var(--space-1);
 }
 
 /* —— 输入框 —— */
@@ -834,6 +819,14 @@ function pickExample(example: ExamplePrompt): void {
 }
 
 /* —— 更多下拉 —— */
+.welcome__model-wrap {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--color-border-subtle);
+}
+
 .welcome__more-wrap {
   position: relative;
 }
