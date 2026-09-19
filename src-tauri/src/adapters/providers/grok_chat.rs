@@ -38,8 +38,9 @@ impl GrokChatAdapter {
 
     fn endpoint(&self) -> String {
         let trimmed = self.base_url.trim_end_matches('/');
-        // 避免 base_url 已含 /v1 时产生 /v1/v1/chat/completions 的双重路径。
-        if trimmed.ends_with("/v1") {
+        // base_url 末段已是版本号（/v1、/v4、/compatible-mode/v1 等）时直接拼接，
+        // 避免产生 /v4/v1/chat/completions 这类双重版本路径。
+        if ends_with_version_segment(trimmed) {
             format!("{}/chat/completions", trimmed)
         } else {
             format!("{}/v1/chat/completions", trimmed)
@@ -607,5 +608,54 @@ mod tests {
         };
         let error = parse_chat_response(raw).unwrap_err();
         assert!(matches!(error, AgentLlmError::MalformedResponse(_)));
+    }
+
+    #[test]
+    fn endpoint_detects_version_suffixes() {
+        let cases = [
+            (
+                "https://api.xiaomimimo.com/v1",
+                "https://api.xiaomimimo.com/v1/chat/completions",
+            ),
+            (
+                "https://open.bigmodel.cn/api/paas/v4",
+                "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+            ),
+            (
+                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+            ),
+            (
+                "https://example.com",
+                "https://example.com/v1/chat/completions",
+            ),
+            (
+                "https://example.com/api",
+                "https://example.com/api/v1/chat/completions",
+            ),
+        ];
+        for (base, expected) in cases {
+            let adapter = GrokChatAdapter::new(base.to_owned(), "key".to_owned());
+            assert_eq!(adapter.endpoint(), expected, "base: {base}");
+        }
+    }
+
+    #[test]
+    fn version_segment_requires_digits() {
+        assert!(ends_with_version_segment("https://x.com/api/v4"));
+        assert!(ends_with_version_segment("https://x.com/api/V2"));
+        assert!(!ends_with_version_segment("https://x.com/api/video"));
+        assert!(!ends_with_version_segment("https://x.com/api/v"));
+        assert!(!ends_with_version_segment("https://x.com/api"));
+    }
+}
+
+/// 判断 URL 最后一段是否为版本段（v + 纯数字，忽略大小写）。
+fn ends_with_version_segment(url: &str) -> bool {
+    let last = url.rsplit('/').next().unwrap_or("");
+    let rest = last.strip_prefix('v').or_else(|| last.strip_prefix('V'));
+    match rest {
+        Some(digits) => !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()),
+        None => false,
     }
 }
