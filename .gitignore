@@ -50,6 +50,8 @@ playwright-report/
 *.db
 *.db-shm
 *.db-wal
+*.sqlite3-shm
+*.sqlite3-wal
 
 # IDE / AI 助手本地数据
 .trae/
