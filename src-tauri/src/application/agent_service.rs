@@ -1084,8 +1084,10 @@ impl AgentService {
                         finish_reason: "user_question".to_owned(),
                     });
                 }
-                Err(_e) => {
-                    // 步骤失败。
+                Err(e) => {
+                    // 步骤失败。失败原因必须落日志：此前 Err(_e) 静默吞错，
+                    // 20:55 复盘中工具调用中断的真实原因无从追查。
+                    eprintln!("[Agent] plan step {} failed: {e}", step.index);
                     self.with_plan_repository(|repo| {
                         repo.update_plan_step(&plan.id, step.index, PlanStepStatus::Failed)
                             .map_err(AppError::from)

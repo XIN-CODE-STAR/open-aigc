@@ -8,6 +8,7 @@ use crate::{
         canvas_context_service::CanvasContextService,
         generation_submit_service::GenerationSubmitService,
         model_router_service::ModelRouterService,
+        provider_registry::ProviderRegistry,
         script_parser_service::ScriptParserService,
         semantic::pipeline_service::SemanticPipelineService,
         semantic::retrieval_service::SemanticRetrievalService,
@@ -263,7 +264,9 @@ impl AgentToolExecutor for BuiltinToolExecutor {
             ),
             ToolDefinition::function(
                 TOOL_LIST_CREDENTIALS,
-                "列出所有可用的图片/视频生成凭据（含 providerName 和 modelName），用于选择生成参数。",
+                "列出所有可用的图片/视频生成凭据（含 providerName 和 modelName），以及已注册的生成 \
+                 Provider 及其能力（generationProviders，含即梦等 session 类资源账号）。\
+                 凭据为空但 generationProviders 非空时，生成工具依然可用，直接调用即可。",
                 serde_json::json!({
                     "type": "object",
                     "properties": {}
@@ -943,6 +946,30 @@ fn truncate_feedback(text: &str, max_chars: usize) -> String {
     }
 }
 
+/// 汇总 ProviderRegistry 中已注册的生成 Provider 及其能力。
+///
+/// 生成能力不只来自 API-Key 凭据表：资源账号（如即梦 session）经
+/// ConnectorAdapterBridge 注册进注册表，同样可承担图片/视频生成。
+/// 只列凭据表会让 LLM 误判"没有视频凭据"而放弃调用生成工具
+/// （19:57 测试复盘：即梦在册但列表为空，video_generation 从未被调用）。
+fn generation_providers_payload(registry: &ProviderRegistry) -> Vec<serde_json::Value> {
+    registry
+        .list_ids()
+        .into_iter()
+        .filter_map(|id| {
+            let adapter = registry.get(&id)?;
+            let mut capabilities: Vec<&str> =
+                adapter.capabilities().iter().map(|c| c.as_str()).collect();
+            capabilities.sort_unstable();
+            capabilities.dedup();
+            Some(serde_json::json!({
+                "provider": adapter.provider_id(),
+                "capabilities": capabilities,
+            }))
+        })
+        .collect()
+}
+
 fn execute_list_credentials(
     executor: &BuiltinToolExecutor,
 ) -> Result<ToolExecutionResult, AgentToolError> {
@@ -966,9 +993,15 @@ fn execute_list_credentials(
         .filter(|c| c.enabled)
         .map(CredentialSummary::from)
         .collect();
+    let generation_providers = executor
+        .provider_registry
+        .as_ref()
+        .map(|registry| generation_providers_payload(registry))
+        .unwrap_or_default();
     let payload = serde_json::json!({
         "credentials": summary,
-        "count": summary.len()
+        "count": summary.len(),
+        "generationProviders": generation_providers,
     });
     Ok(ToolExecutionResult {
         content: serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_owned()),
@@ -2300,5 +2333,27 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&result.content).unwrap();
         let plan = &parsed["plan"];
         assert!(plan["scenes"].as_array().unwrap().len() >= 2);
+    }
+
+    #[test]
+    fn test_generation_providers_payload_lists_capabilities() {
+        // 资源账号（如即梦）经注册表暴露生成能力；list_credentials 必须能看到，
+        // 否则 LLM 会凭"凭据表为空"误判视频生成不可用。
+        let registry = ProviderRegistry::new();
+        registry.register(Arc::new(MockImageProvider {
+            submit_error: false,
+        }));
+
+        let payload = generation_providers_payload(&registry);
+        assert_eq!(payload.len(), 1);
+        assert_eq!(payload[0]["provider"], "mock-image");
+        let caps = payload[0]["capabilities"].as_array().unwrap();
+        assert!(caps.iter().any(|c| c == "text_to_image"));
+    }
+
+    #[test]
+    fn test_generation_providers_payload_empty_registry() {
+        let registry = ProviderRegistry::new();
+        assert!(generation_providers_payload(&registry).is_empty());
     }
 }
