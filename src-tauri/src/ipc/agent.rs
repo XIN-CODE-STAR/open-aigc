@@ -123,7 +123,32 @@ pub async fn agent_v1_delete_conversation(
     app: AppHandle,
     request: DeleteConversationRequest,
 ) -> Result<(), IpcError> {
-    with_agent_service_write(app, move |service| service.delete_conversation(&request.id)).await
+    let conversation_id = request.id;
+    let canvas_conversation_id = conversation_id.clone();
+    with_agent_service_write(app.clone(), move |service| {
+        service.delete_conversation(&conversation_id)
+    })
+    .await?;
+
+    // 级联清理：对话删除后同步删除其画布（软删），避免孤儿画布累积
+    let workspace_dir = app
+        .path()
+        .app_local_data_dir()
+        .map(|dir| dir.join("workspace"))
+        .map_err(|e| IpcError::from(AppError::new("resolve workspace dir", e)))?;
+    let canvas_cleanup = tauri::async_runtime::spawn_blocking(move || {
+        let deleted = crate::application::canvas_memory_rag::delete_canvas_by_conversation(
+            &workspace_dir,
+            &canvas_conversation_id,
+        );
+        if deleted {
+            eprintln!("[Canvas] conversation deleted, canvas removed: {canvas_conversation_id}");
+        }
+    });
+    // 软删很快，等它完成保证命令返回时已生效
+    let _ = canvas_cleanup.await;
+
+    Ok(())
 }
 
 #[tauri::command]

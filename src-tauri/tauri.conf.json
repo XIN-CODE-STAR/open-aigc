@@ -36,14 +36,14 @@
         "default-src": "'self'",
         "connect-src": "ipc: http://ipc.localhost",
         "img-src": "'self' blob: data: asset: http://asset.localhost https://asset.localhost https://*.byteimg.com https://*.toutiaoimg.com",
-        "media-src": "'self' blob: asset: http://asset.localhost https://asset.localhost",
+        "media-src": "'self' blob: asset: http://asset.localhost https://asset.localhost https:",
         "style-src": "'self' 'unsafe-inline'"
       },
       "devCsp": {
         "default-src": "'self' http://localhost:1421",
         "connect-src": "'self' ipc: http://ipc.localhost ws://localhost:1421",
         "img-src": "'self' blob: data: asset: http://asset.localhost https://asset.localhost https://*.byteimg.com https://*.toutiaoimg.com",
-        "media-src": "'self' blob: asset: http://asset.localhost https://asset.localhost",
+        "media-src": "'self' blob: asset: http://asset.localhost https://asset.localhost https:",
         "style-src": "'self' 'unsafe-inline'"
       }
     }

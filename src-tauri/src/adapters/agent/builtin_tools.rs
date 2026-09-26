@@ -153,7 +153,8 @@ impl AgentToolExecutor for BuiltinToolExecutor {
         vec![
             ToolDefinition::function(
                 TOOL_IMAGE_GENERATION,
-                "提交一个图片生成任务。自动选择可用的图片生成 Provider。返回任务 ID 和状态。当对话中用户上传过图片时，默认以最近一张作为参考图走图生图（保持原图版式，只按提示词修改）；传 useReferenceImage=false 可忽略参考图做纯文生图。",
+                "提交一个图片生成任务，生成一张真实的 AI 图像。仅在用户明确要求生成图片/图像/插画时使用——记录文字信息、结论或待办请改用 canvas_add_note。
+当对话中用户上传过图片时，默认以最近一张作为参考图走图生图（保持原图版式，只按提示词修改）；传 useReferenceImage=false 可忽略参考图做纯文生图。返回任务 ID 与状态，出图后自动挂到工作记忆画布。",
                 serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -193,6 +194,44 @@ impl AgentToolExecutor for BuiltinToolExecutor {
                         }
                     },
                     "required": ["query"]
+                }),
+            ),
+            ToolDefinition::function(
+                TOOL_CANVAS_ADD_NOTE,
+                "在当前对话的画布（工作记忆）上创建一条纯文字便签节点，用于记录信息、结论、待办或偏好。                 这是记录文字信息的唯一正确方式——不要为此调用图片生成。返回节点 ID 并自动关联画布上的相关节点。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "便签文字内容"
+                        },
+                        "x": { "type": "number", "description": "画布 x 坐标（可选，默认自动排列）" },
+                        "y": { "type": "number", "description": "画布 y 坐标（可选）" }
+                    },
+                    "required": ["text"]
+                }),
+            ),
+            ToolDefinition::function(
+                TOOL_CANVAS_CONNECT,
+                "在画布的两个节点之间建立语义连线。用 canvas_search 找到源与目标节点后调用。",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "sourceQuery": {
+                            "type": "string",
+                            "description": "源节点检索关键词"
+                        },
+                        "targetQuery": {
+                            "type": "string",
+                            "description": "目标节点检索关键词"
+                        },
+                        "label": {
+                            "type": "string",
+                            "description": "连线标签（可选，如：风格参考、内容补充）"
+                        }
+                    },
+                    "required": ["sourceQuery", "targetQuery"]
                 }),
             ),
             ToolDefinition::function(
@@ -405,7 +444,7 @@ impl AgentToolExecutor for BuiltinToolExecutor {
             ),
             ToolDefinition::function(
                 TOOL_CANVAS_ADD_IMAGE,
-                "在当前对话的画布（工作记忆）上创建一个图片节点。url 填可公开访问的图片地址（http/https 或 data URL）。                 创建后会自动与画布上语义相关的节点建立连线。需要把图片放到画布上供用户查看时调用。",
+                "在当前对话的画布（工作记忆）上创建一个图片节点。url 填可公开访问的图片地址（http/https 或 data URL）。                 仅用于放置已有图片；需要生成新图像请用 image_generation，记录文字请用 canvas_add_note。                 创建后会自动与画布上语义相关的节点建立连线。",
                 serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -2219,7 +2258,7 @@ mod tests {
     }
 
     #[test]
-    fn lists_seven_tools() {
+    fn lists_all_agent_tools() {
         let (_dir, executor, _workspace_id) = seed_executor();
         let tools = executor.list_tools();
         let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
@@ -2230,6 +2269,14 @@ mod tests {
         assert!(names.contains(&TOOL_PARSE_SCRIPT));
         assert!(names.contains(&TOOL_APPLY_SCRIPT_PLAN));
         assert!(names.contains(&TOOL_UPDATE_NODE_STATUS));
+        // 画布工具必须完整暴露给 LLM（缺失会导致模型选不到正确工具）
+        assert!(names.contains(&TOOL_CANVAS_SEARCH));
+        assert!(names.contains(&TOOL_CANVAS_ADD_NOTE));
+        assert!(names.contains(&TOOL_CANVAS_CONNECT));
+        assert!(names.contains(&TOOL_CANVAS_ADD_IMAGE));
+        assert!(names.contains(&TOOL_CANVAS_UPDATE_NODE));
+        assert!(names.contains(&TOOL_CANVAS_AUTO_LAYOUT));
+        assert!(names.contains(&TOOL_CANVAS_EXPORT));
     }
 
     #[test]

@@ -9,7 +9,9 @@
 //! - canvas_search / canvas_add_note / canvas_add_image / canvas_update_node /
 //!   canvas_auto_layout / canvas_export 工具：让 agent 查询与直接操作画布。
 
+use base64::Engine as _;
 use std::collections::HashMap;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -1031,6 +1033,51 @@ pub fn auto_connect_related(
     connected_count
 }
 
+/// 删除指定对话的画布（对话删除时级联，软删）。
+pub fn delete_canvas_by_conversation(workspace_path: &Path, conversation_id: &str) -> bool {
+    let Some(repo) = open_repo(workspace_path) else {
+        return false;
+    };
+    let Some(canvas_id) = find_canvas_id(&repo, conversation_id) else {
+        return false;
+    };
+    repo.delete_canvas(&canvas_id).is_ok()
+}
+
+/// 清理孤儿画布（对应对话已被删除的历史遗留，软删）。
+/// 返回清理数量。启动时调用一次。
+pub fn cleanup_orphan_canvases(workspace_path: &Path) -> usize {
+    let Some(repo) = open_repo(workspace_path) else {
+        return 0;
+    };
+    let Ok(canvases) = repo.list_canvases("default") else {
+        return 0;
+    };
+    let Ok(connection) = rusqlite::Connection::open(workspace_path.join(DB_FILE)) else {
+        return 0;
+    };
+    let mut cleaned = 0;
+    for canvas in canvases {
+        let Some(conversation_id) = canvas.name.strip_prefix("conv-") else {
+            continue;
+        };
+        let exists = connection
+            .query_row(
+                "SELECT 1 FROM agent_conversations WHERE id = ?1",
+                [conversation_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .is_ok();
+        if !exists && repo.delete_canvas(&canvas.id).is_ok() {
+            cleaned += 1;
+        }
+    }
+    if cleaned > 0 {
+        eprintln!("[Canvas] cleaned {cleaned} orphaned canvas(es)");
+    }
+    cleaned
+}
+
 /// 收集 Agent 写入、尚未沉淀到长期记忆的便签（结论/偏好类内容）。
 /// 返回 (node_id, 可读文本) 列表；非 Agent 便签与已同步的跳过。
 pub fn collect_unsynced_agent_notes(
@@ -1275,9 +1322,13 @@ pub fn complete_generation_task_by_task_id(
 
         let mut payload: serde_json::Value =
             serde_json::from_str(&node.payload_json).unwrap_or_else(|_| serde_json::json!({}));
+        let persisted_data_url = image_source_to_data_url(image_url);
         if let Some(obj) = payload.as_object_mut() {
             obj.insert("imageUrl".to_owned(), serde_json::json!(image_url));
             obj.insert("status".to_owned(), serde_json::json!("succeeded"));
+            if let Some(data_url) = &persisted_data_url {
+                obj.insert("dataUrl".to_owned(), serde_json::json!(data_url));
+            }
         }
         let draft = NodeDraft {
             canvas_id: node.canvas_id.clone(),
@@ -1317,6 +1368,87 @@ pub fn complete_generation_task_by_task_id(
     None
 }
 
+/// 单次下载上限（生成图片一般 <5MB）。
+const IMAGE_DOWNLOAD_MAX_BYTES: u64 = 8 * 1024 * 1024;
+
+/// 从字节签名推断图片 MIME。
+fn sniff_image_mime(bytes: &[u8]) -> Option<&'static str> {
+    let png = [0x89u8, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    let jpeg = [0xFFu8, 0xD8, 0xFF];
+    if bytes.len() >= 8 && bytes[0..8] == png {
+        Some("image/png")
+    } else if bytes.len() >= 3 && bytes[0..3] == jpeg {
+        Some("image/jpeg")
+    } else if bytes.len() >= 12
+        && bytes[0..4] == [0x52u8, 0x49, 0x46, 0x46]
+        && bytes[8..12] == [0x57u8, 0x45, 0x42, 0x50]
+    {
+        Some("image/webp")
+    } else if bytes.len() >= 4 && bytes[0..4] == [0x47u8, 0x49, 0x46, 0x38] {
+        Some("image/gif")
+    } else {
+        None
+    }
+}
+
+fn mime_from_extension(path: &str) -> Option<&'static str> {
+    let lower = path.to_lowercase();
+    if lower.ends_with(".png") {
+        Some("image/png")
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        Some("image/jpeg")
+    } else if lower.ends_with(".webp") {
+        Some("image/webp")
+    } else if lower.ends_with(".gif") {
+        Some("image/gif")
+    } else {
+        None
+    }
+}
+
+/// 把图片来源（http/https URL 或本地文件路径）转为 data URL，
+/// 使画布节点摆脱 CDN 签名 URL 的时效限制。失败返回 None（调用方保留原 URL）。
+pub fn image_source_to_data_url(source: &str) -> Option<String> {
+    let trimmed = source.trim();
+    let (bytes, mime): (Vec<u8>, Option<&str>) =
+        if trimmed.starts_with("https://") || trimmed.starts_with("http://") {
+            let response = ureq::get(trimmed)
+                .timeout(std::time::Duration::from_secs(30))
+                .call()
+                .ok()?;
+            if response.status() >= 400 {
+                return None;
+            }
+            let content_type = response.header("content-type").map(str::to_owned);
+            let mut bytes = Vec::new();
+            response
+                .into_reader()
+                .take(IMAGE_DOWNLOAD_MAX_BYTES)
+                .read_to_end(&mut bytes)
+                .ok()?;
+            let sniffed = sniff_image_mime(&bytes);
+            let mime = content_type
+                .filter(|ct| ct.starts_with("image/"))
+                .and_then(|ct| ct.split(';').next().map(str::to_owned))
+                .or_else(|| sniffed.map(str::to_owned))?;
+            (bytes, Some(Box::leak(mime.into_boxed_str())))
+        } else if !trimmed.contains("://") {
+            let bytes = std::fs::read(trimmed).ok()?;
+            let mime = mime_from_extension(trimmed).or_else(|| sniff_image_mime(&bytes));
+            (bytes, mime)
+        } else {
+            return None;
+        };
+    if bytes.is_empty() {
+        return None;
+    }
+    let mime = mime.unwrap_or("image/png");
+    Some(format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
+}
+
 /// 图片生成完成后（同步出图路径）：确保画布上存在该结果的图片节点，
 /// 并在画布上能定位到参考图节点时建立「风格参考」连线。
 ///
@@ -1337,6 +1469,9 @@ pub fn ensure_generation_image_node(
     let repo = open_repo(workspace_path)?;
     let canvas_id = ensure_canvas(workspace_path, conversation_id)?;
     let nodes = repo.list_nodes(&canvas_id).ok().unwrap_or_default();
+
+    // CDN 签名 URL 会过期：立即把图片固化为 dataUrl 随节点持久化
+    let persisted_data_url = image_source_to_data_url(image_url);
 
     let existing = nodes
         .iter()
@@ -1364,6 +1499,9 @@ pub fn ensure_generation_image_node(
                 obj.insert("imageUrl".to_owned(), serde_json::json!(image_url));
                 obj.insert("status".to_owned(), serde_json::json!("succeeded"));
                 obj.insert("taskId".to_owned(), serde_json::json!(task_id));
+                if let Some(data_url) = &persisted_data_url {
+                    obj.insert("dataUrl".to_owned(), serde_json::json!(data_url));
+                }
             }
             let draft = NodeDraft {
                 canvas_id: node.canvas_id.clone(),
@@ -1398,14 +1536,19 @@ pub fn ensure_generation_image_node(
                 position_y,
                 width: None,
                 height: None,
-                payload_json: serde_json::json!({
-                    "imageUrl": image_url,
-                    "prompt": prompt,
-                    "status": "succeeded",
-                    "source": "agent",
-                    "taskId": task_id,
-                })
-                .to_string(),
+                payload_json: {
+                    let mut payload = serde_json::json!({
+                        "imageUrl": image_url,
+                        "prompt": prompt,
+                        "status": "succeeded",
+                        "source": "agent",
+                        "taskId": task_id,
+                    });
+                    if let Some(data_url) = &persisted_data_url {
+                        payload["dataUrl"] = serde_json::Value::String(data_url.clone());
+                    }
+                    payload.to_string()
+                },
                 summary: Some(summary),
                 asset_id: None,
             })
@@ -2003,6 +2146,28 @@ mod tests {
             note.summary,
             nodes.len()
         );
+    }
+
+    #[test]
+    fn cleanup_orphan_canvases_removes_all_when_no_conversations_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join(DB_FILE);
+        // 生产命名约定：conv-{conversation_id}
+        seed_canvas(&db, "conv-orphan-a");
+        seed_canvas(&db, "conv-orphan-b");
+        // 测试环境无 agent_conversations 行 → 所有画布均为孤儿
+
+        let cleaned = cleanup_orphan_canvases(dir.path());
+        assert_eq!(cleaned, 2);
+
+        // 幂等：再次运行为 0
+        assert_eq!(cleanup_orphan_canvases(dir.path()), 0);
+        // 画布已被软删：find_canvas_id 不再可见
+        assert!(find_canvas_id(
+            &SqliteMemoryCanvasRepository::open(&db).unwrap(),
+            "orphan-a"
+        )
+        .is_none());
     }
 
     #[test]

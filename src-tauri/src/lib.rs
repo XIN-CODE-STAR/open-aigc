@@ -141,6 +141,14 @@ pub fn run() {
             let generation_repository = SqliteGenerationRepository::open(&database_path)?;
             let credential_repository = SqliteCredentialRepository::open(&database_path)?;
 
+            // 启动时清理孤儿画布（对应对话已被删除的历史遗留，软删）
+            let cleaned = crate::application::canvas_memory_rag::cleanup_orphan_canvases(
+                &workspace_directory,
+            );
+            if cleaned > 0 {
+                eprintln!("[Setup] cleaned {cleaned} orphaned canvas(es)");
+            }
+
             if !app.manage(WorkspaceService::new(
                 workspace_repository,
                 database_path.clone(),
