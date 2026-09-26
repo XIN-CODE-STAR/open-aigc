@@ -236,6 +236,13 @@ fn check_single_account(
 /// 有效；代理不可达时无法验证，保持原状态（此时生成同样不可用，
 /// 但不误报登录失效）。
 fn check_jimeng_session(session_id: &str, old_status: &str) -> String {
+    // jm_ 前缀是 jimeng-free-api-all 新代理的托管 API Key（账号池模式），
+    // 不是即梦 sessionid：拿它查积分必然 1015，会把健康账号误标 need_login
+    // （00:54 误报复盘）。其有效性由代理账号池维护，真实故障在提交时
+    // 由工具如实上报，这里视为可用。
+    if session_id.starts_with("jm_") {
+        return AccountStatus::Active.as_str().to_owned();
+    }
     let url = format!(
         "http://127.0.0.1:{}/token/points",
         crate::connectors::resources::jimeng_connector::JIMENG_API_PROXY_PORT
