@@ -15,8 +15,9 @@ export default typescriptEslint.config(
       "src-tauri/gen/**",
       "src-tauri/target/**",
       "work/**",
-      // jimeng-api 代理子项目有自己的工具链，构建产物与源码均不由本仓库 lint。
-      "services/jimeng-api/**",
+      // services/ 下的代理子项目（jimeng-api、jimeng-free-api-all 等）有独立工具链，
+      // 构建产物与源码均不由本仓库 lint。
+      "services/**",
     ],
   },
   eslint.configs.recommended,
