@@ -382,6 +382,9 @@ const nonMediaAssets = computed(() =>
   assets.value.filter((a) => a.assetKind !== "image" && a.assetKind !== "video"),
 );
 
+/** 当前详情预览的媒体资产（null = 关闭）。 */
+const previewAsset = ref<AssetRecord | null>(null);
+
 /** 将资产的 relativePath 转为本地文件 URL（asset 协议直读磁盘，最快路径） */
 function getAssetSrc(asset: { relativePath: string }): string {
   const workspaceDir = managedFilesDir.value;
@@ -543,7 +546,15 @@ function getAssetSrc(asset: { relativePath: string }): string {
         "
         class="image-grid"
       >
-        <div v-for="asset in mediaAssets" :key="asset.id" class="image-card">
+        <div
+          v-for="asset in mediaAssets"
+          :key="asset.id"
+          class="image-card"
+          role="button"
+          tabindex="0"
+          @click="previewAsset = asset"
+          @keydown.enter="previewAsset = asset"
+        >
           <video
             v-if="asset.assetKind === 'video'"
             :src="getAssetSrc(asset)"
@@ -601,6 +612,29 @@ function getAssetSrc(asset: { relativePath: string }): string {
         :row-label="(row) => row.displayName"
       />
     </template>
+
+    <!-- 媒体详情预览：点击卡片打开，支持视频播放 -->
+    <ModalDialog :open="previewAsset !== null" size="large" @close="previewAsset = null">
+      <template #title>{{ previewAsset?.displayName ?? "" }}</template>
+      <div class="asset-preview">
+        <video
+          v-if="previewAsset?.assetKind === 'video'"
+          :src="getAssetSrc(previewAsset)"
+          class="asset-preview__media"
+          controls
+          autoplay
+        />
+        <img
+          v-else-if="previewAsset"
+          :src="getAssetSrc(previewAsset)"
+          class="asset-preview__media"
+          :alt="previewAsset.displayName"
+        />
+        <p v-if="previewAsset?.relativePath" class="asset-preview__path">
+          {{ previewAsset.relativePath }}
+        </p>
+      </div>
+    </ModalDialog>
 
     <ImportAssetsDialog
       :open="importOpen"
@@ -1076,5 +1110,25 @@ button:disabled {
 
 .image-card__btn:hover {
   background: rgba(255, 255, 255, 0.35);
+}
+.asset-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.asset-preview__media {
+  max-width: 100%;
+  max-height: 64vh;
+  border-radius: var(--radius-surface);
+  background: var(--color-canvas);
+}
+
+.asset-preview__path {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-caption);
+  word-break: break-all;
 }
 </style>
