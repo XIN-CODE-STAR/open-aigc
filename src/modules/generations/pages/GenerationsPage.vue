@@ -36,11 +36,9 @@ import {
   loadSelectedSkillIds,
   saveSelectedSkillIds,
 } from "../skills";
-import ShotWorkspace from "../components/ShotWorkspace.vue";
 import CreativeMemoryPanel from "../components/CreativeMemoryPanel.vue";
 import ModelRouterSelector from "../components/ModelRouterSelector.vue";
 import MemoryCanvasPanel from "../../../modules/memory/components/MemoryCanvasPanel.vue";
-import { useMangaProject } from "../composables/useMangaProject";
 import { queueV1SubmitAttempt } from "../../../bridge/queue";
 import { useProjectDirectory } from "../../../app/stores/projectDirectory";
 import { useMemoryCanvasStore } from "../../../app/stores/memoryCanvas";
@@ -160,7 +158,6 @@ const EXAMPLES_BY_MODE = computed<Record<CreationMode, ExamplePrompt[]>>(() => (
 const workspace = useWorkspaceStore();
 const history = useGenerationHistory();
 const agent = useAgentConversation();
-const manga = useMangaProject();
 const projectDir = useProjectDirectory();
 const route = useRoute();
 const router = useRouter();
@@ -606,23 +603,11 @@ watch(
   { immediate: true },
 );
 
-// 切换项目/会话时，更新侧边栏显示的上下文名称
-watch(
-  () => manga.currentProject.value,
-  (proj) => {
-    if (proj) {
-      projectDir.setContextName(proj.title);
-    }
-  },
-);
-
-// 切换对话时更新上下文名称（不在漫画项目中时）
+// 切换对话时更新侧边栏上下文名称
 watch(
   () => agentConversation.value?.id,
   () => {
-    if (!manga.isInProject.value) {
-      projectDir.setContextName(agentConversation.value?.title ?? null);
-    }
+    projectDir.setContextName(agentConversation.value?.title ?? null);
   },
 );
 
@@ -630,7 +615,7 @@ watch(
 watch(
   () => route.query.conversation,
   (convId) => {
-    if (!convId && !manga.isInProject.value) {
+    if (!convId) {
       projectDir.setContextName(null);
     }
   },
@@ -1194,50 +1179,6 @@ async function answerQuestion(answer: string): Promise<void> {
   }
 }
 
-/**
- * 添加场景到当前项目。
- */
-async function handleAddScene(): Promise<void> {
-  const title = prompt("场景名称：");
-  if (!title?.trim()) return;
-  const index = manga.scenes.value.length;
-  await manga.addScene(title.trim(), index);
-}
-
-/**
- * 添加镜头到指定场景。
- */
-async function handleAddShot(sceneId: string): Promise<void> {
-  const index = manga.shots.value.filter((s) => s.sceneId === sceneId).length;
-  await manga.addShot(sceneId, index);
-}
-
-/**
- * 更新镜头 Prompt。
- */
-function handleUpdatePrompt(shotId: string, prompt: string): void {
-  // TODO: 调用 manga.updateShotPrompt(shotId, prompt) 保存到后端
-  console.log("更新镜头 Prompt:", shotId, prompt);
-}
-
-/**
- * 为镜头创建生成任务。
- */
-async function handleGenerate(shotId: string, prompt: string): Promise<void> {
-  const credential = selectedCredential.value;
-  if (!credential) {
-    sendError.value = "请先选择一个模型。";
-    return;
-  }
-  await manga.generateForShot(shotId, prompt, {
-    credentialId: credential.id,
-    providerId: selectedProviderId.value || credential.providerName,
-    providerName: credential.providerName,
-    modelName: selectedModelName.value || credential.modelName,
-    capability: creationMode.value === "video" ? "text-to-video" : "text-to-image",
-  });
-}
-
 function buildEnrichedPrompt(base: string): string {
   const parts: string[] = [`[${currentMode.value.label}]`, base];
   const generationHint = buildGenerationHint(selectedSkillIds.value);
@@ -1298,29 +1239,8 @@ function formatTime(iso: string): string {
        创意工坊：工作台风格 · 顶部状态条 · 底部 Composer
        ═══════════════════════════════════════════════ -->
   <div class="grok-shell">
-    <!-- ═══ 项目工作台：选择项目后显示 ═══ -->
-    <ShotWorkspace
-      v-if="manga.isInProject.value"
-      :project="manga.currentProject.value!"
-      :scenes="manga.scenes.value"
-      :shots="manga.shots.value"
-      :characters="manga.characters.value"
-      :selected-shot-id="manga.selectedShotId.value"
-      :shot-attempts="manga.shotAttempts.value"
-      :generating="manga.generating.value"
-      :project-id="manga.currentProject.value!.id"
-      @back="manga.leaveProject()"
-      @add-scene="handleAddScene"
-      @add-shot="handleAddShot"
-      @select-shot="(s) => manga.selectShot(s)"
-      @update-prompt="handleUpdatePrompt"
-      @generate="handleGenerate"
-      @cancel="(id) => manga.cancelAttempt(id)"
-      @retry="(id) => manga.retryAttempt(id)"
-    />
-
     <!-- ═══ 空状态：居中输入框欢迎页 ═══ -->
-    <div v-else-if="isEmpty" class="grok-welcome">
+    <div v-if="isEmpty" class="grok-welcome">
       <CreativeEmptyState
         :current-mode="currentMode"
         :examples="EXAMPLES_BY_MODE[creationMode]"
