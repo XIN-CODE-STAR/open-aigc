@@ -12,33 +12,16 @@
  * Phase 1 拆分目标：只通过 props/emit 通信，不直接调 bridge / store。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import {
-  CheckCircle2,
-  ChevronDown,
-  FileUp,
-  FolderOpen,
-  FolderPlus,
-  LoaderCircle,
-  Blocks,
-  RotateCcw,
-  Send,
-  Settings2,
-  Sparkles,
-} from "@lucide/vue";
+import { FileUp, LoaderCircle, Blocks, Send, Settings2, Sparkles } from "@lucide/vue";
 import type { CredentialRecord } from "../../../bridge/credentials";
 import type { ResourceAccountRecord } from "../../../bridge/resourceAccounts";
-import { projectDirName } from "../../../app/stores/projectDirectory";
+import ComposerModeChips, { type ComposerModeItem } from "./ComposerModeChips.vue";
+
+/** 创作模式项（由共享的 ComposerModeChips 定义）。 */
+export type { ComposerModeItem };
 import CreationParameterBar from "./CreationParameterBar.vue";
 import ProviderModelSelector from "./ProviderModelSelector.vue";
 import ReferenceAssetStrip from "./ReferenceAssetStrip.vue";
-
-/** 创作模式项（与 CreativeEmptyState 中的 CreationModeItem 字段保持一致）。 */
-export interface ComposerModeItem {
-  id: "agent" | "image" | "video" | "music" | "voiceover" | "digital-human" | "motion";
-  label: string;
-  description: string;
-  icon: unknown;
-}
 
 const props = defineProps<{
   /** 双向绑定的 prompt 内容。 */
@@ -129,12 +112,6 @@ const emit = defineEmits<{
 
 void props;
 
-const modeMenuRef = ref<HTMLElement | null>(null);
-/** 目录选择下拉是否展开（最近工作目录 + 添加新项目）。 */
-const showDirMenu = ref(false);
-const dirMenuRef = ref<HTMLElement | null>(null);
-
-const recentProjectsList = computed(() => props.recentProjects ?? []);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
@@ -148,19 +125,6 @@ function onInput(event: Event): void {
 
 function onKeydown(event: KeyboardEvent): void {
   emit("prompt-keydown", event);
-}
-
-function onSelectPrimaryMode(mode: ComposerModeItem): void {
-  emit("update:creationMode", mode.id);
-}
-
-function toggleModeMenu(): void {
-  emit("update:showModeMenu", !props.showModeMenu);
-}
-
-function pickExtraMode(mode: ComposerModeItem): void {
-  emit("update:creationMode", mode.id);
-  emit("update:showModeMenu", false);
 }
 
 function onSend(): void {
@@ -205,43 +169,11 @@ function triggerFileSelect(): void {
   fileInputRef.value?.click();
 }
 
-function onDocumentClick(event: MouseEvent): void {
-  const target = event.target as Node | null;
-  if (modeMenuRef.value && target && !modeMenuRef.value.contains(target)) {
-    if (props.showModeMenu) {
-      emit("update:showModeMenu", false);
-    }
-  }
-  if (dirMenuRef.value && target && !dirMenuRef.value.contains(target)) {
-    showDirMenu.value = false;
-  }
-}
-
-function toggleDirMenu(): void {
-  if (recentProjectsList.value.length === 0) {
-    // 没有历史目录时直接打开系统选择器（等同"添加新项目"）
-    emit("select-directory");
-    return;
-  }
-  showDirMenu.value = !showDirMenu.value;
-}
-
-function pickRecent(path: string): void {
-  showDirMenu.value = false;
-  emit("select-project", path);
-}
-
-function addNewProject(): void {
-  showDirMenu.value = false;
-  emit("select-directory");
-}
-
 function preventDragDefault(event: Event): void {
   event.preventDefault();
 }
 
 onMounted(() => {
-  document.addEventListener("click", onDocumentClick);
   // 原生监听：阻止 textarea 的拖拽默认行为（加载文件内容），
   // 但不调用 stopPropagation，让事件冒泡到 document 级别的全局处理。
   const ta = textareaRef.value;
@@ -252,7 +184,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener("click", onDocumentClick);
   const ta = textareaRef.value;
   if (ta) {
     ta.removeEventListener("dragover", preventDragDefault);
@@ -269,53 +200,18 @@ onBeforeUnmount(() => {
     <div class="composer-box" :class="{ 'is-drag-over': isDraggingFile }">
       <!-- 拖拽提示 -->
       <div v-if="isDraggingFile" class="drag-hint">松开添加文件</div>
-      <!-- 模式芯片平铺 -->
+      <!-- 模式芯片平铺（共享组件） -->
       <div class="mode-row">
-        <button
-          v-for="mode in primaryModes"
-          :key="mode.id"
-          type="button"
-          class="mode-chip"
-          :class="{ 'is-active': creationMode === mode.id }"
-          :title="mode.description"
-          @click="onSelectPrimaryMode(mode)"
-        >
-          <component :is="mode.icon" :size="13" />
-          <span>{{ mode.label }}</span>
-        </button>
-
-        <div ref="modeMenuRef" class="mode-more">
-          <button
-            type="button"
-            class="mode-chip"
-            :class="{
-              'is-active': isExtraMode,
-              'is-open': showModeMenu,
-            }"
-            title="更多创作类型"
-            @click="toggleModeMenu"
-          >
-            <component :is="isExtraMode ? currentMode.icon : Sparkles" :size="13" />
-            <span>{{ isExtraMode ? currentMode.label : "更多" }}</span>
-            <ChevronDown :size="11" class="mode-caret" />
-          </button>
-          <Transition name="menu">
-            <div v-if="showModeMenu" class="mode-menu">
-              <button
-                v-for="mode in extraModes"
-                :key="mode.id"
-                type="button"
-                class="mode-menu-item"
-                :class="{ 'is-selected': mode.id === creationMode }"
-                @click="pickExtraMode(mode)"
-              >
-                <component :is="mode.icon" :size="14" />
-                <span>{{ mode.label }}</span>
-                <CheckCircle2 v-if="mode.id === creationMode" :size="12" class="mode-menu-check" />
-              </button>
-            </div>
-          </Transition>
-        </div>
+        <ComposerModeChips
+          :primary-modes="primaryModes"
+          :extra-modes="extraModes"
+          :current-mode="currentMode"
+          :creation-mode="creationMode"
+          :show-mode-menu="showModeMenu"
+          menu-direction="up"
+          @update:creation-mode="(v: string) => emit('update:creationMode', v)"
+          @update:show-mode-menu="emit('update:showModeMenu', $event)"
+        />
 
         <!-- 工作台操作按钮（原顶部栏迁移至此）：附件 + 新会话 + 偏好 -->
         <div class="composer-actions">
@@ -374,53 +270,16 @@ onBeforeUnmount(() => {
       <!-- 底部工具栏 -->
       <div class="toolbar">
         <div class="toolbar-left">
-          <!-- 项目目录选择：下拉列出最近打开的工作目录 + 添加新项目 -->
-          <span ref="dirMenuRef" class="dir-anchor">
-            <button
-              type="button"
-              class="tool-btn"
-              :title="projectDirectory ? '切换输出目录' : '选择输出目录'"
-              @click="toggleDirMenu"
-            >
-              <FolderOpen :size="14" />
-            </button>
-            <Transition name="dir-menu">
-              <div v-if="showDirMenu" class="dir-menu">
-                <div class="dir-menu__section">最近打开</div>
-                <button
-                  v-for="item in recentProjectsList"
-                  :key="item"
-                  type="button"
-                  class="dir-menu__item"
-                  :title="item"
-                  @click="pickRecent(item)"
-                >
-                  <FolderOpen :size="13" />
-                  <span class="dir-menu__name">{{ projectDirName(item) }}</span>
-                </button>
-                <div class="dir-menu__divider" />
-                <button
-                  type="button"
-                  class="dir-menu__item dir-menu__item--add"
-                  @click="addNewProject"
-                >
-                  <FolderPlus :size="13" />
-                  <span class="dir-menu__name">添加新项目</span>
-                </button>
-              </div>
-            </Transition>
-          </span>
-          <span v-if="projectDirectory" class="dir-chip" :title="projectDirectory">
-            {{ projectDisplayName }}
-            <button
-              type="button"
-              class="dir-chip__reset"
-              title="恢复默认目录"
-              @click.stop="emit('reset-directory')"
-            >
-              <RotateCcw :size="10" />
-            </button>
-          </span>
+          <!-- 项目目录选择（共享组件：最近目录 + 添加新项目） -->
+          <ComposerDirPicker
+            :project-directory="projectDirectory"
+            :project-display-name="projectDisplayName"
+            :recent-projects="recentProjects"
+            direction="up"
+            @select-directory="emit('select-directory')"
+            @select-project="(path: string) => emit('select-project', path)"
+            @reset-directory="emit('reset-directory')"
+          />
 
           <button
             type="button"
@@ -857,85 +716,6 @@ onBeforeUnmount(() => {
 
 .dir-chip__reset:hover {
   background: var(--color-surface-hover);
-}
-
-/* 目录选择下拉：锚定在文件夹按钮上方（composer 位于页面底部） */
-.dir-anchor {
-  position: relative;
-  display: inline-flex;
-}
-
-.dir-menu {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  min-width: 220px;
-  max-width: 320px;
-  padding: 6px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  background: var(--color-surface);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 35%);
-  z-index: 50;
-}
-
-.dir-menu__section {
-  padding: 4px 10px 6px;
-  color: var(--color-text-tertiary);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-}
-
-.dir-menu__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text);
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.dir-menu__item:hover {
-  background: var(--color-surface-hover);
-}
-
-.dir-menu__item--add {
-  color: var(--color-accent);
-}
-
-.dir-menu__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dir-menu__divider {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--color-border-subtle);
-}
-
-.dir-menu-enter-active,
-.dir-menu-leave-active {
-  transition:
-    opacity 140ms ease,
-    transform 140ms var(--ease-out, ease);
-}
-
-.dir-menu-enter-from,
-.dir-menu-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
 }
 
 .char-count {

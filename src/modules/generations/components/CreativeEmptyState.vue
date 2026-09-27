@@ -10,22 +10,14 @@
  *
  * 空状态时作为主页面居中展示，替代传统的"无内容"提示。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import {
-  ChevronDown,
-  FolderOpen,
-  FolderPlus,
-  Image,
-  RotateCcw,
-  Send,
-  Sparkles,
-  X,
-} from "@lucide/vue";
+import { computed } from "vue";
+import { Image, Send, Sparkles, X } from "@lucide/vue";
 
 import type { CredentialRecord } from "../../../bridge/credentials";
 import type { ResourceAccountRecord } from "../../../bridge/resourceAccounts";
-import { projectDirName } from "../../../app/stores/projectDirectory";
 import CreationParameterBar from "./CreationParameterBar.vue";
+import ComposerDirPicker from "./ComposerDirPicker.vue";
+import ComposerModeChips from "./ComposerModeChips.vue";
 import ProviderModelSelector from "./ProviderModelSelector.vue";
 import MemoryStatusBadge from "./MemoryStatusBadge.vue";
 
@@ -34,6 +26,7 @@ export interface CreationModeItem {
   id: "agent" | "image" | "video" | "music" | "voiceover" | "digital-human" | "motion";
   label: string;
   description: string;
+  icon: unknown;
   badge?: string;
 }
 
@@ -148,52 +141,6 @@ function onSend(): void {
   emit("send");
 }
 
-function onSelectMode(mode: { id: string }): void {
-  emit("update:creation-mode", mode.id);
-}
-
-function toggleMore(): void {
-  emit("update:show-mode-menu", !props.showModeMenu);
-}
-
-/** 目录选择下拉：最近工作目录 + 添加新项目。 */
-const showDirMenu = ref(false);
-const dirMenuRef = ref<HTMLElement | null>(null);
-const recentProjectsList = computed(() => props.recentProjects ?? []);
-
-function toggleDirMenu(): void {
-  if (recentProjectsList.value.length === 0) {
-    emit("select-directory");
-    return;
-  }
-  showDirMenu.value = !showDirMenu.value;
-}
-
-function pickRecent(path: string): void {
-  showDirMenu.value = false;
-  emit("select-project", path);
-}
-
-function addNewProject(): void {
-  showDirMenu.value = false;
-  emit("select-directory");
-}
-
-function onDocumentClick(event: MouseEvent): void {
-  const target = event.target as Node | null;
-  if (dirMenuRef.value && target && !dirMenuRef.value.contains(target)) {
-    showDirMenu.value = false;
-  }
-}
-
-onMounted(() => {
-  document.addEventListener("click", onDocumentClick);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("click", onDocumentClick);
-});
-
 function pickExample(example: ExamplePrompt): void {
   emit("pick", example);
 }
@@ -213,53 +160,15 @@ function pickExample(example: ExamplePrompt): void {
     <div class="welcome__input-group">
       <!-- 资源栏：文件夹选择 + 已上传图片（同一行） -->
       <div class="welcome__resources">
-        <span ref="dirMenuRef" class="dir-anchor">
-          <button
-            type="button"
-            class="welcome__resource-btn"
-            :title="projectDirectory ? '切换输出目录' : '选择输出目录'"
-            @click="toggleDirMenu"
-          >
-            <FolderOpen :size="14" />
-            <span class="welcome__resource-label">
-              {{ projectDirectory ? projectDisplayName : "打开" }}
-            </span>
-            <button
-              v-if="projectDirectory"
-              type="button"
-              class="welcome__resource-reset"
-              title="恢复默认目录"
-              @click.stop="emit('reset-directory')"
-            >
-              <RotateCcw :size="10" />
-            </button>
-          </button>
-          <Transition name="dir-menu">
-            <div v-if="showDirMenu" class="dir-menu dir-menu--down">
-              <div class="dir-menu__section">最近打开</div>
-              <button
-                v-for="item in recentProjectsList"
-                :key="item"
-                type="button"
-                class="dir-menu__item"
-                :title="item"
-                @click="pickRecent(item)"
-              >
-                <FolderOpen :size="13" />
-                <span class="dir-menu__name">{{ projectDirName(item) }}</span>
-              </button>
-              <div class="dir-menu__divider" />
-              <button
-                type="button"
-                class="dir-menu__item dir-menu__item--add"
-                @click="addNewProject"
-              >
-                <FolderPlus :size="13" />
-                <span class="dir-menu__name">添加新项目</span>
-              </button>
-            </div>
-          </Transition>
-        </span>
+        <ComposerDirPicker
+          :project-directory="projectDirectory"
+          :project-display-name="projectDisplayName"
+          :recent-projects="recentProjects"
+          direction="down"
+          @select-directory="emit('select-directory')"
+          @select-project="(path: string) => emit('select-project', path)"
+          @reset-directory="emit('reset-directory')"
+        />
         <!-- 已上传图片 chips（与文件夹按钮同行、同尺寸） -->
         <template v-if="referenceImages && referenceImages.length > 0">
           <div v-for="(img, idx) in referenceImages" :key="idx" class="welcome__ref-chip">
@@ -307,70 +216,41 @@ function pickExample(example: ExamplePrompt): void {
       </Transition>
     </div>
 
-    <!-- 创作模式胶囊 -->
+    <!-- 创作模式胶囊 + 模型/生成来源选择 -->
     <div class="welcome__modes">
-      <button
-        v-for="mode in primaryModes"
-        :key="mode.id"
-        type="button"
-        class="welcome__pill"
-        :class="{ 'is-active': creationMode === mode.id }"
-        @click="onSelectMode(mode)"
-      >
-        {{ mode.label }}
-      </button>
+      <ComposerModeChips
+        :primary-modes="primaryModes"
+        :extra-modes="extraModes"
+        :current-mode="currentMode"
+        :creation-mode="creationMode"
+        :show-mode-menu="showModeMenu"
+        size="lg"
+        menu-direction="down"
+        @update:creation-mode="(v: string) => emit('update:creation-mode', v)"
+        @update:show-mode-menu="(v: boolean) => emit('update:show-mode-menu', v)"
+      />
 
-      <div class="welcome__more-wrap">
-        <button
-          type="button"
-          class="welcome__pill"
-          :class="{ 'is-active': extraModes.some((m) => m.id === creationMode) }"
-          @click="toggleMore"
-        >
-          更多
-          <ChevronDown :size="12" />
-        </button>
-        <Transition name="menu">
-          <div v-if="showModeMenu" class="welcome__more-menu">
-            <button
-              v-for="mode in extraModes"
-              :key="mode.id"
-              type="button"
-              class="welcome__more-item"
-              @click="
-                onSelectMode(mode);
-                emit('update:show-mode-menu', false);
-              "
-            >
-              <component :is="mode.icon" :size="14" />
-              <span>{{ mode.label }}</span>
-            </button>
-          </div>
-        </Transition>
-
-        <!-- 模型 / 生成来源选择（输入卡外，模式行内） -->
-        <span class="welcome__model-wrap">
-          <ProviderModelSelector
-            :credentials="credentials"
-            :selected-credential-id="selectedCredentialId"
-            :resource-accounts="resourceAccounts"
-            :selected-account-id="selectedAccountId"
-            :task-type="
-              creationMode === 'video'
-                ? 'video_generation'
-                : creationMode === 'image'
-                  ? 'image_generation'
-                  : undefined
-            "
-            :source-label="
-              creationMode === 'image' || creationMode === 'video' ? '生成来源' : undefined
-            "
-            pop-placement="bottom"
-            @select="(id: string) => emit('select-credential', id)"
-            @select-account="(id: string) => emit('select-account', id)"
-          />
-        </span>
-      </div>
+      <span class="welcome__model-wrap">
+        <ProviderModelSelector
+          :credentials="credentials"
+          :selected-credential-id="selectedCredentialId"
+          :resource-accounts="resourceAccounts"
+          :selected-account-id="selectedAccountId"
+          :task-type="
+            creationMode === 'video'
+              ? 'video_generation'
+              : creationMode === 'image'
+                ? 'image_generation'
+                : undefined
+          "
+          :source-label="
+            creationMode === 'image' || creationMode === 'video' ? '生成来源' : undefined
+          "
+          pop-placement="bottom"
+          @select="(id: string) => emit('select-credential', id)"
+          @select-account="(id: string) => emit('select-account', id)"
+        />
+      </span>
     </div>
 
     <!-- 创作参数（图片/视频模式下显示） -->
@@ -501,89 +381,6 @@ function pickExample(example: ExamplePrompt): void {
   background: var(--color-surface-hover);
   border-color: var(--color-border);
   color: var(--color-text);
-}
-
-/* 目录选择下拉：锚定在打开按钮下方（欢迎页位于页面中部） */
-.dir-anchor {
-  position: relative;
-  display: inline-flex;
-}
-
-.dir-menu--down {
-  bottom: auto;
-  top: calc(100% + 8px);
-}
-
-.dir-menu {
-  position: absolute;
-  left: 0;
-  min-width: 220px;
-  max-width: 320px;
-  padding: 6px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  background: var(--color-surface);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 35%);
-  z-index: 50;
-}
-
-.dir-menu__section {
-  padding: 4px 10px 6px;
-  color: var(--color-text-tertiary);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-}
-
-.dir-menu__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text);
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.dir-menu__item:hover {
-  background: var(--color-surface-hover);
-}
-
-.dir-menu__item--add {
-  color: var(--color-accent);
-}
-
-.dir-menu__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dir-menu__divider {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--color-border-subtle);
-}
-
-.dir-menu-enter-active,
-.dir-menu-leave-active {
-  transition:
-    opacity 140ms ease,
-    transform 140ms var(--ease-out, ease);
-}
-
-.dir-menu-enter-from,
-.dir-menu-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
 }
 
 .welcome__resource-label {
@@ -787,81 +584,12 @@ function pickExample(example: ExamplePrompt): void {
   justify-content: center;
 }
 
-.welcome__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 32px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
-}
-
-.welcome__pill:hover {
-  background: var(--color-surface-hover);
-  border-color: var(--color-border);
-  color: var(--color-text);
-}
-
-.welcome__pill.is-active {
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-/* —— 更多下拉 —— */
 .welcome__model-wrap {
   display: inline-flex;
   align-items: center;
   margin-left: var(--space-2);
   padding-left: var(--space-3);
   border-left: 1px solid var(--color-border-subtle);
-}
-
-.welcome__more-wrap {
-  position: relative;
-}
-
-.welcome__more-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 140px;
-  padding: var(--space-1);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-surface);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
-  z-index: 10;
-}
-
-.welcome__more-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: none;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--color-text);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out);
-}
-
-.welcome__more-item:hover {
-  background: var(--color-surface-hover);
 }
 
 /* —— 发现区域 —— */
@@ -953,12 +681,6 @@ function pickExample(example: ExamplePrompt): void {
 }
 
 /* —— 菜单过渡 —— */
-.menu-enter-active,
-.menu-leave-active {
-  transition:
-    opacity var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
 
 .menu-enter-from,
 .menu-leave-to {
