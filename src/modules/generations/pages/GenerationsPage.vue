@@ -37,7 +37,6 @@ import {
   saveSelectedSkillIds,
 } from "../skills";
 import CreativeMemoryPanel from "../components/CreativeMemoryPanel.vue";
-import ModelRouterSelector from "../components/ModelRouterSelector.vue";
 import MemoryCanvasPanel from "../../../modules/memory/components/MemoryCanvasPanel.vue";
 import { queueV1SubmitAttempt } from "../../../bridge/queue";
 import { useProjectDirectory } from "../../../app/stores/projectDirectory";
@@ -186,8 +185,6 @@ const loaded = ref(false);
 const promptText = ref("");
 const selectedCredentialId = ref<string>("");
 const selectedAccountId = ref<string>("");
-const selectedProviderId = ref<string>("");
-const selectedModelName = ref<string>("");
 const modelMenuOpen = ref(false);
 const modelMenuRef = ref<HTMLElement | null>(null);
 const sending = ref(false);
@@ -1295,48 +1292,11 @@ function formatTime(iso: string): string {
       <Transition name="drawer">
         <aside v-if="showPreferences" class="grok-prefs">
           <div class="prefs-head">
-            <span>偏好</span>
+            <span>创作记忆</span>
             <button type="button" class="prefs-close" @click="showPreferences = false">
               <X :size="14" />
             </button>
           </div>
-          <div class="prefs-section">
-            <span class="prefs-label">创作类型</span>
-            <div class="prefs-mode-grid">
-              <button
-                v-for="mode in CREATION_MODES"
-                :key="mode.id"
-                type="button"
-                class="prefs-mode"
-                :class="{ 'is-active': creationMode === mode.id }"
-                @click="creationMode = mode.id"
-              >
-                <component :is="mode.icon" :size="14" />
-                <span>{{ mode.label }}</span>
-              </button>
-            </div>
-          </div>
-          <!-- AI 模型路由选择器 -->
-          <div class="prefs-section">
-            <span class="prefs-label">AI 模型</span>
-            <ModelRouterSelector
-              :task-type="
-                creationMode === 'video'
-                  ? 'video_generation'
-                  : creationMode === 'image'
-                    ? 'image_generation'
-                    : 'text_generation'
-              "
-              :auto-route="true"
-              @select-model="
-                (p, m) => {
-                  selectedProviderId = p;
-                  selectedModelName = m;
-                }
-              "
-            />
-          </div>
-          <!-- 创意记忆面板 -->
           <div class="prefs-section">
             <CreativeMemoryPanel :user-id="creativeMemoryUserId" />
           </div>
