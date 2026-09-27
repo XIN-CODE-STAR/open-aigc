@@ -127,6 +127,33 @@
   --aurora-glow-1: rgba(139, 92, 246, 0.15);
   --aurora-glow-2: rgba(6, 182, 212, 0.12);
   --aurora-glow-3: rgba(236, 72, 153, 0.1);
+
+  /* —— 字重 / 行高阶梯 —— */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --line-height-tight: 1.2;
+  --line-height-snug: 1.4;
+  --line-height-normal: 1.6;
+
+  /* —— z-index 阶梯（全局唯一依据，组件禁止自造数值） —— */
+  --z-canvas: 10;
+  --z-raised: 20;
+  --z-dropdown: 50;
+  --z-drawer: 60;
+  --z-modal: 70;
+  --z-toast: 80;
+  --z-immersive: 100;
+
+  /* —— 记忆画布节点色系（主题联动，替代 JS 内嵌色值） —— */
+  --canvas-node-note: var(--aurora-violet);
+  --canvas-node-image: var(--aurora-blue);
+  --canvas-node-script: #6366f1;
+  --canvas-node-video: var(--aurora-cyan);
+  --canvas-node-audio: #818cf8;
+  --canvas-node-default: #a78bfa;
+  --canvas-node-mark: #fbbf24;
 }
 
 :root[data-theme="dark"] {
