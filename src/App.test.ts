@@ -46,8 +46,10 @@ describe("App", () => {
 
     expect(mounted.wrapper.get("h1").text()).toBe("设置");
     const mainNavigation = mounted.wrapper.get('[aria-label="主导航"]').text();
-    expect(mainNavigation).toContain("资源库");
+    expect(mainNavigation).toContain("创意工坊");
+    expect(mainNavigation).toContain("资产库");
     expect(mainNavigation).toContain("提示词库");
+    expect(mainNavigation).toContain("备份");
   });
 
   it("changes and persists the color theme", async () => {

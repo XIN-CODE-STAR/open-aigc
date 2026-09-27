@@ -14,7 +14,7 @@ describe("parsePreferences", () => {
       defaultMaxTokens: 4096,
       defaultTemperature: 0.7,
       density: "standard",
-      navigationExpanded: true,
+      navigationExpanded: false,
       soundEnabled: true,
       streamingEnabled: true,
       theme: "system",
@@ -52,6 +52,6 @@ describe("parsePreferences", () => {
 
     expect(preferences.theme).toBe("system");
     expect(preferences.density).toBe("standard");
-    expect(preferences.navigationExpanded).toBe(true);
+    expect(preferences.navigationExpanded).toBe(false);
   });
 });

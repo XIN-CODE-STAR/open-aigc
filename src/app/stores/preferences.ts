@@ -19,7 +19,8 @@ const STORAGE_KEY = "aigc-studio.preferences.v1";
 
 const DEFAULT_PREFERENCES: PreferenceSnapshot = {
   density: "standard",
-  navigationExpanded: true,
+  // 默认窄轨（图标栏）：主内容最大化，展开状态由用户钉住
+  navigationExpanded: false,
   theme: "system",
   soundEnabled: true,
   autoSaveConversations: true,
