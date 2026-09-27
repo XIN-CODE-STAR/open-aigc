@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { Bot, Link, LoaderCircle, Pencil, Plus, Trash2, UserCircle } from "@lucide/vue";
+import BaseSwitch from "../../../shared/ui/BaseSwitch.vue";
 
 import ProviderLogo from "../components/ProviderLogo.vue";
 
@@ -372,15 +373,11 @@ function formatDate(iso: string): string {
                 >
                   <Pencil :size="15" :stroke-width="1.8" />
                 </button>
-                <button
-                  class="icon-btn"
-                  type="button"
+                <BaseSwitch
+                  :model-value="account.enabled"
                   :title="account.enabled ? '禁用' : '启用'"
-                  :aria-label="account.enabled ? '禁用' : '启用'"
-                  @click="handleToggleAccount(account)"
-                >
-                  <span class="toggle-dot" :class="{ 'toggle-dot--off': !account.enabled }" />
-                </button>
+                  @update:model-value="handleToggleAccount(account)"
+                />
                 <button
                   class="icon-btn icon-btn--danger"
                   type="button"

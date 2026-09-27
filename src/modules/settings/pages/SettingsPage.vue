@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import type { Component } from "vue";
+
+import { version as appVersion } from "../../../../package.json";
 import {
   AlignJustify,
   Bell,
@@ -335,7 +337,7 @@ function onMaxTokensInput(event: Event): void {
         <p>AI 驱动的创意工作台，支持图片、视频、音乐、数字人等多模态创作。</p>
       </div>
       <div class="about-info">
-        <span class="about-version">v0.2.0</span>
+        <span class="about-version">v{{ appVersion }}</span>
         <span class="about-platform">Tauri + Vue 3</span>
       </div>
     </section>

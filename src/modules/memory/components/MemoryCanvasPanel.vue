@@ -942,7 +942,7 @@ defineExpose({
           :pannable="true"
           :zoomable="true"
           :node-color="(n: any) => getNodeColor(n.data?.nodeType)"
-          :mask-color="'rgb(15, 20, 30, 0.7)'"
+          :mask-color="'color-mix(in srgb, var(--color-canvas) 70%, transparent)'"
           class="canvas-minimap"
         />
         <button
@@ -1144,7 +1144,7 @@ function getNodeColor(type: string | undefined): string {
 
 .memory-canvas-panel .vue-flow__controls-button:hover {
   background: rgb(99 102 241 / 28%);
-  color: #fff;
+  color: var(--color-text);
 }
 
 .memory-canvas-panel .vue-flow__selection {
@@ -1232,7 +1232,7 @@ function getNodeColor(type: string | undefined): string {
   padding: 5px;
   border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 14px;
-  background: rgb(13 18 30 / 80%);
+  background: var(--material-sheet);
   backdrop-filter: blur(14px);
   box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
   transform: translateX(-50%);
@@ -1256,12 +1256,12 @@ function getNodeColor(type: string | undefined): string {
 
 .canvas-dock__btn:hover:not(:disabled) {
   background: rgb(255 255 255 / 9%);
-  color: #fff;
+  color: var(--color-text);
 }
 
 .canvas-dock__btn--active,
 .canvas-dock__btn--active:hover:not(:disabled) {
-  color: #fff;
+  color: var(--color-text);
   background: var(--color-accent);
   box-shadow: 0 2px 12px rgb(99 102 241 / 50%);
 }
@@ -1354,7 +1354,7 @@ function getNodeColor(type: string | undefined): string {
   height: 30px;
   padding: 0 var(--space-4);
   margin-top: var(--space-3);
-  color: #fff;
+  color: var(--color-text);
   border: none;
   border-radius: var(--radius-control);
   background: var(--color-accent);
@@ -1440,7 +1440,7 @@ function getNodeColor(type: string | undefined): string {
   padding: 6px 10px 6px 14px;
   border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 999px;
-  background: rgb(13 18 30 / 78%);
+  background: var(--material-sheet);
   backdrop-filter: blur(14px);
   box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
   transform: translateX(-50%);
@@ -1493,17 +1493,17 @@ function getNodeColor(type: string | undefined): string {
 
 .canvas-topbar__btn:hover {
   background: rgb(255 255 255 / 9%);
-  color: #fff;
+  color: var(--color-text);
 }
 
 .canvas-topbar__btn--accent {
-  color: #fff;
+  color: var(--color-text);
   background: rgb(99 102 241 / 35%);
 }
 
 .canvas-topbar__btn--accent:hover {
   background: rgb(99 102 241 / 55%);
-  color: #fff;
+  color: var(--color-text);
 }
 /* Loading */
 .canvas-loading {
@@ -1537,7 +1537,7 @@ function getNodeColor(type: string | undefined): string {
 .canvas-error-overlay__retry {
   height: 30px;
   padding: 0 var(--space-5);
-  color: #fff;
+  color: var(--color-text);
   border: none;
   border-radius: var(--radius-control);
   background: var(--color-accent);
