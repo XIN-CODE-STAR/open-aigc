@@ -43,8 +43,8 @@ const { toasts, remove } = useToast();
   gap: var(--space-2, 8px);
   padding: var(--space-3, 12px) var(--space-4, 16px);
   border-radius: var(--radius-control, 8px);
-  background: var(--color-surface, #1e1e2e);
-  border: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.08));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   pointer-events: auto;
   cursor: pointer;
@@ -53,7 +53,7 @@ const { toasts, remove } = useToast();
 }
 
 .toast-card__message {
-  color: var(--color-text, #e0e0e0);
+  color: var(--color-text);
   font-size: var(--text-subhead, 13px);
   line-height: 20px;
 }
@@ -63,7 +63,7 @@ const { toasts, remove } = useToast();
 }
 
 .toast-card--success .toast-card__message {
-  color: var(--color-success, #22c55e);
+  color: var(--color-success);
 }
 
 .toast-card--error {
@@ -71,7 +71,7 @@ const { toasts, remove } = useToast();
 }
 
 .toast-card--error .toast-card__message {
-  color: var(--color-danger, #ef4444);
+  color: var(--color-danger);
 }
 
 .toast-card--warning {
@@ -79,7 +79,7 @@ const { toasts, remove } = useToast();
 }
 
 .toast-card--warning .toast-card__message {
-  color: var(--color-warning, #f59e0b);
+  color: var(--color-warning);
 }
 
 .toast-card--info {
@@ -87,7 +87,7 @@ const { toasts, remove } = useToast();
 }
 
 .toast-card--info .toast-card__message {
-  color: var(--color-accent, #6366f1);
+  color: var(--color-accent);
 }
 
 .toast-enter-active {

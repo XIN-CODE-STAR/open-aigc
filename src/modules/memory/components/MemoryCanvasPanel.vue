@@ -231,7 +231,7 @@ const {
   defaultEdgeOptions: {
     type: "smoothstep",
     animated: true,
-    style: { stroke: "#6366f1", strokeWidth: 2 },
+    style: { stroke: "var(--canvas-node-script)", strokeWidth: 2 },
   },
   fitViewOnInit: true,
   snapToGrid: true,
@@ -705,15 +705,15 @@ function getEdgeVisual(edgeType: string): {
 } {
   switch (edgeType) {
     case "reference":
-      return { stroke: "#6366f1", strokeWidth: 2 };
+      return { stroke: "var(--canvas-node-script)", strokeWidth: 2 };
     case "dependency":
-      return { stroke: "#a78bfa", strokeWidth: 2.5, strokeDasharray: "10 5" };
+      return { stroke: "var(--canvas-node-default)", strokeWidth: 2.5, strokeDasharray: "10 5" };
     case "link":
-      return { stroke: "#38bdf8", strokeWidth: 1.5 };
+      return { stroke: "var(--canvas-node-video)", strokeWidth: 1.5 };
     case "similarity":
-      return { stroke: "#818cf8", strokeWidth: 2, strokeDasharray: "2 5" };
+      return { stroke: "var(--canvas-node-audio)", strokeWidth: 2, strokeDasharray: "2 5" };
     default:
-      return { stroke: "#94a3b8", strokeWidth: 1.5 };
+      return { stroke: "var(--color-text-tertiary)", strokeWidth: 1.5 };
   }
 }
 
@@ -809,7 +809,11 @@ defineExpose({
         :zoom-on-scroll="true"
         :zoom-on-pinch="true"
         :pan-on-scroll="false"
-        :connection-line-style="{ stroke: '#818cf8', strokeWidth: 2, strokeDasharray: '6 4' }"
+        :connection-line-style="{
+          stroke: 'var(--canvas-node-audio)',
+          strokeWidth: 2,
+          strokeDasharray: '6 4',
+        }"
         :connection-radius="30"
         :elevate-nodes-on-select="true"
         :only-render-visible-elements="nodes.length > 40"
@@ -1094,16 +1098,16 @@ defineExpose({
 
 <script lang="ts">
 function getNodeColor(type: string | undefined): string {
-  if (!type) return "#94a3b8";
+  if (!type) return "var(--color-text-tertiary)";
   const colors: Record<string, string> = {
-    fact: "#8b5cf6",
-    note: "#3b82f6",
-    image: "#6366f1",
-    video: "#38bdf8",
-    document: "#818cf8",
-    upload: "#a78bfa",
+    fact: "var(--canvas-node-note)",
+    note: "var(--canvas-node-image)",
+    image: "var(--canvas-node-script)",
+    video: "var(--canvas-node-video)",
+    document: "var(--canvas-node-audio)",
+    upload: "var(--canvas-node-default)",
   };
-  return colors[type] || "#94a3b8";
+  return colors[type] || "var(--color-text-tertiary)";
 }
 </script>
 
@@ -1239,7 +1243,7 @@ function getNodeColor(type: string | undefined): string {
   width: 34px;
   height: 34px;
   place-items: center;
-  color: var(--color-text-secondary, #cbd5f5);
+  color: var(--color-text-secondary);
   border: none;
   border-radius: 9px;
   background: transparent;
@@ -1400,7 +1404,7 @@ function getNodeColor(type: string | undefined): string {
   z-index: 30;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface, #0f1420);
+  background: var(--color-surface);
   overflow: hidden;
 }
 
@@ -1477,7 +1481,7 @@ function getNodeColor(type: string | undefined): string {
   width: 24px;
   height: 24px;
   place-items: center;
-  color: var(--color-text-secondary, #cbd5f5);
+  color: var(--color-text-secondary);
   border: none;
   border-radius: 7px;
   background: transparent;
@@ -1578,7 +1582,7 @@ function getNodeColor(type: string | undefined): string {
   width: 22px;
   height: 22px;
   place-items: center;
-  color: var(--color-text-secondary, #cbd5f5);
+  color: var(--color-text-secondary);
   border: 1px solid var(--color-border-subtle);
   border-radius: 6px;
   background: rgb(12 16 24 / 88%);

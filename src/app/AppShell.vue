@@ -703,10 +703,10 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  color: var(--color-on-accent, #fff);
+  color: var(--color-on-accent);
   border: none;
   border-radius: var(--radius-control);
-  background: linear-gradient(135deg, var(--color-accent), var(--aurora-cyan, #6ee7b7));
+  background: linear-gradient(135deg, var(--color-accent), var(--aurora-cyan));
   font-size: var(--text-subhead);
   font-weight: 600;
   cursor: pointer;

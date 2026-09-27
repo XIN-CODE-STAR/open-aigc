@@ -522,7 +522,7 @@ function pickExample(example: ExamplePrompt): void {
   padding: 6px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
-  background: var(--color-surface, #171c26);
+  background: var(--color-surface);
   box-shadow: 0 8px 28px rgb(0 0 0 / 35%);
   z-index: 50;
 }

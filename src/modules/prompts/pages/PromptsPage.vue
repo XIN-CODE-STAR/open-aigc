@@ -569,7 +569,7 @@ const editorOpen = computed(() => editingPrompt.value !== null || isCreating.val
 
 .danger-button {
   color: var(--color-on-accent);
-  background: var(--color-danger, #d9342b);
+  background: var(--color-danger);
 }
 
 .danger-button:hover {
@@ -776,7 +776,7 @@ const editorOpen = computed(() => editingPrompt.value !== null || isCreating.val
 }
 
 .icon-button--danger:hover {
-  color: var(--color-danger, #d9342b);
+  color: var(--color-danger);
 }
 
 .card-content {
@@ -895,7 +895,7 @@ const editorOpen = computed(() => editingPrompt.value !== null || isCreating.val
   align-items: center;
   gap: var(--space-2);
   margin: 0;
-  color: var(--color-danger, #d9342b);
+  color: var(--color-danger);
   font-size: var(--text-footnote);
 }
 

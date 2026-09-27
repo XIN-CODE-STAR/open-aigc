@@ -611,7 +611,7 @@ watch(
 }
 
 .btn--primary {
-  color: var(--color-on-accent, #fff);
+  color: var(--color-on-accent);
   background: var(--color-accent);
 }
 

@@ -148,7 +148,7 @@ const mcpServers = ref([{ name: "内置工具", status: "connected", count: buil
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--color-border-subtle);
-  background: var(--color-surface, #0f1420);
+  background: var(--color-surface);
   box-shadow: -8px 0 32px rgb(0 0 0 / 40%);
 }
 
@@ -234,7 +234,7 @@ const mcpServers = ref([{ name: "内置工具", status: "connected", count: buil
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border-subtle);
   border-radius: 8px;
-  background: var(--color-surface-subtle, rgb(255 255 255 / 2%));
+  background: var(--color-surface-subtle);
   transition: border-color var(--duration-fast) var(--ease-out);
 }
 .ext-item + .ext-item {
@@ -307,7 +307,7 @@ const mcpServers = ref([{ name: "内置工具", status: "connected", count: buil
 .ext-tag {
   padding: 1px 6px;
   color: var(--color-accent);
-  background: var(--color-accent-soft, rgb(99 102 241 / 10%));
+  background: var(--color-accent-soft);
   border-radius: 4px;
   font-size: 10px;
   font-weight: 500;

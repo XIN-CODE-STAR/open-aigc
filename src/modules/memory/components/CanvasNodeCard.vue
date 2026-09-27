@@ -143,16 +143,16 @@ const thumbnailUrl = computed(() => {
 });
 
 const nodeColor = computed(() => {
-  // 蓝-紫-石板灰色系（与画布 accent 一致）
+  // 节点类型色系：读 tokens.css 的 --canvas-node-*，随主题联动
   const colors: Record<string, string> = {
-    fact: "#8b5cf6",
-    note: "#3b82f6",
-    image: "#6366f1",
-    video: "#38bdf8",
-    document: "#818cf8",
-    upload: "#a78bfa",
+    fact: "var(--canvas-node-note)",
+    note: "var(--canvas-node-image)",
+    image: "var(--canvas-node-script)",
+    video: "var(--canvas-node-video)",
+    document: "var(--canvas-node-audio)",
+    upload: "var(--canvas-node-default)",
   };
-  return colors[props.data.nodeType] || "#94a3b8";
+  return colors[props.data.nodeType] || "var(--canvas-node-mark)";
 });
 
 const statusLabel = computed(() => {
@@ -186,12 +186,12 @@ const typeLabel = computed(() => TYPE_LABELS[props.data.nodeType] ?? props.data.
 
 /** 便签纸质感：payload.color 调色（缺省琥珀纸色）+ 细横纹纹理。 */
 const noteColor = computed(() => {
-  if (!isNote.value) return "#fbbf24";
+  if (!isNote.value) return "var(--canvas-node-mark)";
   try {
     const color = JSON.parse(props.data.payloadJson).color;
-    return typeof color === "string" && color.startsWith("#") ? color : "#fbbf24";
+    return typeof color === "string" && color.startsWith("#") ? color : "var(--canvas-node-mark)";
   } catch {
-    return "#fbbf24";
+    return "var(--canvas-node-mark)";
   }
 });
 
@@ -199,7 +199,7 @@ const rootStyle = computed(() => {
   const style: Record<string, string> = {};
   if (isNote.value) {
     style.background = [
-      `linear-gradient(165deg, color-mix(in srgb, ${noteColor.value} 20%, var(--color-surface-subtle, #1a1f2e)), var(--color-surface-subtle, #1a1f2e) 72%)`,
+      `linear-gradient(165deg, color-mix(in srgb, ${noteColor.value} 20%, var(--color-surface-subtle)), var(--color-surface-subtle) 72%)`,
       "repeating-linear-gradient(0deg, rgb(255 255 255 / 2.5%) 0 1px, transparent 1px 3px)",
     ].join(", ");
   }
@@ -320,7 +320,7 @@ watch(
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 12px;
-  background: var(--color-surface-subtle, #1a1f2e);
+  background: var(--color-surface-subtle);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.24);
   padding: 10px 12px;
   font-size: 12px;
@@ -348,9 +348,9 @@ watch(
   background: linear-gradient(
     135deg,
     transparent 0 46%,
-    var(--color-text-tertiary, #64748b) 46% 54%,
+    var(--color-text-tertiary) 46% 54%,
     transparent 54% 64%,
-    var(--color-text-tertiary, #64748b) 64% 72%,
+    var(--color-text-tertiary) 64% 72%,
     transparent 72%
   );
   transition: opacity var(--duration-fast) var(--ease-out);
@@ -426,7 +426,7 @@ watch(
   background: rgba(148, 163, 184, 0.1);
 }
 .canvas-node__status.is-generating {
-  color: #6366f1;
+  color: var(--canvas-node-script);
   background: rgba(99, 102, 241, 0.1);
   animation: pulse 1.5s ease-in-out infinite;
 }
@@ -464,7 +464,7 @@ watch(
 .canvas-node__summary {
   flex-shrink: 1;
   min-height: 0;
-  color: var(--color-text, #e2e8f0);
+  color: var(--color-text);
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
@@ -473,7 +473,7 @@ watch(
 .canvas-node__prompt {
   flex-shrink: 0;
   margin-top: 4px;
-  color: var(--color-text-tertiary, #64748b);
+  color: var(--color-text-tertiary);
   font-size: 11px;
   line-height: 1.3;
   overflow: hidden;

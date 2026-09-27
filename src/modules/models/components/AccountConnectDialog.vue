@@ -235,7 +235,7 @@ function handleClose(): void {
   gap: var(--space-2);
   padding: var(--space-3);
   border-radius: var(--radius-control);
-  background: var(--color-accent-soft, rgba(99, 102, 241, 0.08));
+  background: var(--color-accent-soft);
   color: var(--color-text-secondary);
   font-size: var(--text-caption);
   line-height: 1.4;

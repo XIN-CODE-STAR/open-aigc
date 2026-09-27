@@ -470,7 +470,7 @@ function formatDate(iso: string): string {
 }
 
 .btn--primary {
-  color: var(--color-on-accent, #fff);
+  color: var(--color-on-accent);
   background: var(--color-accent);
 }
 
@@ -714,7 +714,7 @@ function formatDate(iso: string): string {
 }
 
 .credential-card__icon--account {
-  color: var(--color-success, #22c55e);
+  color: var(--color-success);
   background: rgba(34, 197, 94, 0.08);
 }
 
@@ -726,12 +726,12 @@ function formatDate(iso: string): string {
 }
 
 .badge--active {
-  color: var(--color-success, #22c55e);
+  color: var(--color-success);
   background: rgba(34, 197, 94, 0.1);
 }
 
 .badge--warning {
-  color: var(--color-warning, #f59e0b);
+  color: var(--color-warning);
   background: rgba(245, 158, 11, 0.1);
 }
 
@@ -745,7 +745,7 @@ function formatDate(iso: string): string {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--color-success, #22c55e);
+  background: var(--color-success);
   transition: background var(--duration-fast) var(--ease-out);
 }
 

@@ -164,13 +164,13 @@ function accountStatusLabel(status: string): string {
 function accountStatusColor(status: string): string {
   switch (status) {
     case "active":
-      return "#22c55e";
+      return "var(--color-success)";
     case "need_login":
-      return "#ff9f40";
+      return "var(--color-warning)";
     case "blocked":
-      return "#ef4444";
+      return "var(--color-danger)";
     default:
-      return "#94a3b8";
+      return "var(--color-text-tertiary)";
   }
 }
 
@@ -202,7 +202,8 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
         :style="{
           background: selectedDisplay.isAccount
             ? accountStatusColor(selectedDisplay.status ?? '')
-            : (statusColor(selectedDisplay.status as ProviderAccountStatus) ?? '#94a3b8'),
+            : (statusColor(selectedDisplay.status as ProviderAccountStatus) ??
+              'var(--color-text-tertiary)'),
         }"
         :title="`状态：${selectedDisplay.isAccount ? accountStatusLabel(selectedDisplay.status ?? '') : statusLabel(selectedDisplay.status as ProviderAccountStatus)}`"
         aria-hidden="true"
@@ -288,10 +289,10 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
                   :style="{
                     color:
                       acc.status === 'active'
-                        ? '#22c55e'
+                        ? 'var(--color-success)'
                         : acc.status === 'need_login'
-                          ? '#ff9f40'
-                          : '#ef4444',
+                          ? 'var(--color-warning)'
+                          : 'var(--color-danger)',
                   }"
                 >
                   ·
@@ -358,7 +359,7 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
 .model-btn-source {
   padding: 1px 6px;
   border-radius: 4px;
-  background: var(--color-accent-soft, rgb(99 102 241 / 12%));
+  background: var(--color-accent-soft);
   color: var(--color-accent);
   font-size: 10px;
   font-weight: 500;
@@ -514,7 +515,7 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
   border-radius: 4px;
   background: rgba(255, 159, 64, 0.15);
   border: 1px solid rgba(255, 159, 64, 0.3);
-  color: #ff9f40;
+  color: var(--color-warning);
   font-size: 10px;
   font-weight: 500;
   cursor: pointer;
