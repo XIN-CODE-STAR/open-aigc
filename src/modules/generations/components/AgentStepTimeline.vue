@@ -398,14 +398,13 @@ function handleImageError(event: Event) {
 
 .turn-user {
   align-self: flex-end;
-  max-width: 80%;
-  padding: 8px 12px;
+  max-width: 78%;
+  padding: 10px 14px;
   background: var(--color-accent-soft);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 12px 12px 4px 12px;
+  border-radius: 14px 14px 4px 14px;
   color: var(--color-text);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: var(--line-height-normal);
 }
 
 .user-text {
@@ -443,19 +442,17 @@ function handleImageError(event: Event) {
 
 .turn-ai {
   align-self: flex-start;
-  max-width: min(90%, 820px);
+  max-width: min(94%, 820px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 0;
-  border-left: 2px solid var(--color-border-subtle);
-  padding-left: 12px;
+  gap: 10px;
+  padding: 2px 0;
 }
 
 .ai-text {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 13.5px;
+  line-height: 1.65;
   color: var(--color-text);
   white-space: pre-wrap;
   word-break: break-word;
@@ -527,15 +524,16 @@ function handleImageError(event: Event) {
 }
 
 .ai-image {
-  max-width: min(320px, 100%);
-  max-height: 320px;
+  max-width: min(360px, 100%);
+  max-height: 360px;
   width: auto;
   height: auto;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-sm);
   object-fit: contain;
   cursor: pointer;
-  transition: transform 160ms ease;
+  transition: transform var(--duration-fast) ease;
 }
 
 .ai-image:hover {
@@ -543,9 +541,9 @@ function handleImageError(event: Event) {
 }
 
 .ai-video {
-  max-width: min(320px, 100%);
-  max-height: 320px;
-  border-radius: 10px;
+  max-width: min(360px, 100%);
+  max-height: 360px;
+  border-radius: 12px;
   border: 1px solid var(--color-border-subtle);
   display: block;
   background: var(--color-surface-subtle);
