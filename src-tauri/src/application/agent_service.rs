@@ -1040,6 +1040,7 @@ impl AgentService {
             );
 
             // 执行当前步骤的工具循环。
+            let invocations_before_step = all_invocations.len();
             let step_result = self.execute_single_step(
                 app,
                 conversation_id,
@@ -1104,6 +1105,45 @@ impl AgentService {
                     );
                     // 继续执行下一步，不中断整个计划
                 }
+            }
+
+            // ── 终态提交失败短路 ──
+            // 图片/视频生成的任务创建成功但 provider 提交被拒（登录失效/风控，
+            // payload ok=false）时，剩余步骤只会对着同一份失败反复报告
+            // （22:22 复盘：单图请求被规划成 5 步、同一失败刷屏 3 次）。
+            // 仅当整个运行尚未产生任何成功的生成结果时才短路，多镜头计划
+            // 已有成功产出时保持部分成功语义；真实原因已在步骤失败日志中。
+            let failed_submit_in_step = all_invocations[invocations_before_step..]
+                .iter()
+                .any(generation_submit_failed);
+            if failed_submit_in_step && no_successful_generation_submit(&all_invocations) {
+                let remaining: Vec<u8> = plan
+                    .steps
+                    .iter()
+                    .filter(|s| s.index > step.index)
+                    .map(|s| s.index)
+                    .collect();
+                for index in &remaining {
+                    self.with_plan_repository(|repo| {
+                        repo.update_plan_step(&plan.id, *index, PlanStepStatus::Failed)
+                            .map_err(AppError::from)
+                    })?;
+                    emit_event(
+                        app,
+                        conversation_id,
+                        AgentEvent::PlanStepChanged {
+                            conversation_id: conversation_id.to_owned(),
+                            plan_id: plan.id.clone(),
+                            step_index: *index,
+                            status: PlanStepStatus::Failed,
+                        },
+                    );
+                }
+                eprintln!(
+                    "[Agent] generation submit failed terminally; skipping {} remaining steps",
+                    remaining.len()
+                );
+                break;
             }
 
             if total_iterations >= EXECUTE_MAX_ITERATIONS {
@@ -1630,6 +1670,36 @@ pub(crate) fn merge_system_prompt(base: Option<String>, override_text: &str) -> 
             format!("{}\n\n{}", existing, override_text)
         }
         _ => override_text.to_owned(),
+    })
+}
+
+/// 判断一次工具调用是否为图片/视频生成的提交被 provider 终态拒绝
+/// （任务创建成功但 submit 被拒：payload ok=false，登录失效/风控等）。
+fn generation_submit_failed(invocation: &ToolInvocationRecord) -> bool {
+    if !matches!(
+        invocation.tool_name.as_str(),
+        "image_generation" | "video_generation"
+    ) {
+        return false;
+    }
+    invocation
+        .result_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+        .is_some_and(|payload| payload["ok"] == serde_json::Value::Bool(false))
+}
+
+/// 整个运行中是否从未出现过成功的图片/视频生成提交。
+fn no_successful_generation_submit(invocations: &[ToolInvocationRecord]) -> bool {
+    !invocations.iter().any(|inv| {
+        matches!(
+            inv.tool_name.as_str(),
+            "image_generation" | "video_generation"
+        ) && inv
+            .result_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+            .is_some_and(|payload| payload["ok"] == serde_json::Value::Bool(true))
     })
 }
 
@@ -2364,5 +2434,65 @@ mod tests {
         }];
         let summary = summarize_omitted(&messages);
         assert!(summary.contains("1 条消息"));
+    }
+
+    fn generation_invocation(tool_name: &str, ok: bool) -> ToolInvocationRecord {
+        ToolInvocationRecord {
+            id: "inv-1".to_owned(),
+            message_id: "msg-1".to_owned(),
+            conversation_id: "conv-1".to_owned(),
+            tool_name: tool_name.to_owned(),
+            arguments_json: "{}".to_owned(),
+            result_json: Some(
+                serde_json::json!({ "ok": ok, "status": if ok { "submitted" } else { "failed" } })
+                    .to_string(),
+            ),
+            status: ToolInvocationStatus::Succeeded,
+            error_message: None,
+            generation_task_id: Some("task-1".to_owned()),
+            started_at: None,
+            completed_at: None,
+            created_at: "2026-09-27T00:00:00Z".to_owned(),
+        }
+    }
+
+    #[test]
+    fn test_generation_submit_failed_detection() {
+        // 提交被拒（ok=false）才算终态失败
+        assert!(generation_submit_failed(&generation_invocation(
+            "image_generation",
+            false
+        )));
+        assert!(generation_submit_failed(&generation_invocation(
+            "video_generation",
+            false
+        )));
+        // 提交成功不算失败
+        assert!(!generation_submit_failed(&generation_invocation(
+            "image_generation",
+            true
+        )));
+        // 非生成工具不参与判定
+        assert!(!generation_submit_failed(&generation_invocation(
+            "list_credentials",
+            false
+        )));
+    }
+
+    #[test]
+    fn test_no_successful_generation_submit() {
+        let failed_only = vec![generation_invocation("image_generation", false)];
+        assert!(no_successful_generation_submit(&failed_only));
+
+        // 出现任意一次成功提交后不短路（保持多镜头部分成功语义）
+        let with_success = vec![
+            generation_invocation("image_generation", false),
+            generation_invocation("video_generation", true),
+        ];
+        assert!(!no_successful_generation_submit(&with_success));
+
+        // 非生成工具不干扰判定
+        let empty = vec![];
+        assert!(no_successful_generation_submit(&empty));
     }
 }

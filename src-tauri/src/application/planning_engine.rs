@@ -206,6 +206,30 @@ impl PlanningEngine {
             });
         }
 
+        // ── 单张图片快速路径（D7 镜像）──
+        // 非分镜的图片请求直接建 1 步图片任务：Director 倾向把单图请求展开成
+        // 多镜头多步计划（22:22 复盘：单图被规划成 5 步，同一个提交失败在
+        // 每一步各刷一条回复）。确定性单步同时消除过度规划与重复回复。
+        if wants_image(raw_user_content) && !has_image && !is_storyboard_request(raw_user_content) {
+            let steps = build_single_shot_image_steps(user_content);
+            let draft =
+                PlanDraft::try_new(conversation_id.to_owned(), user_content.to_owned(), steps)?;
+            let record = self.create_plan_from_draft(draft)?;
+            super::agent_service::emit_event(
+                app,
+                conversation_id,
+                AgentEvent::PlanCreated {
+                    conversation_id: conversation_id.to_owned(),
+                    plan: record.clone(),
+                },
+            );
+            eprintln!("[Planner] single-shot image fast path: 1 step");
+            return Ok(PlanningOutcome::Planned {
+                plan: record,
+                creative_plan: None,
+            });
+        }
+
         // Creative Director 分析：仅对创作类任务调用。
         // 注意用原始用户文本判定：图片分析注入的增强文本充满"海报/设计"等词，
         // 会让"去除二维码"这类简单修改请求被误判为创作任务而过度展开多镜头计划。
@@ -581,6 +605,28 @@ pub(crate) fn build_single_shot_video_steps(
     }]
 }
 
+/// 判断用户消息是否要求生成图片（区别于视频等其它创作物）。
+pub(crate) fn wants_image(message: &str) -> bool {
+    const IMAGE_KEYWORDS: &[&str] = &[
+        "画", "图", "图片", "海报", "插画", "照片", "壁纸", "头像", "封面",
+    ];
+    if wants_video(message) {
+        return false;
+    }
+    let lower = message.to_lowercase();
+    IMAGE_KEYWORDS.iter().any(|kw| lower.contains(kw))
+}
+
+/// 构造单张图片任务的执行步骤（快速路径，纯函数便于测试）。
+pub(crate) fn build_single_shot_image_steps(prompt: &str) -> Vec<PlanStep> {
+    vec![PlanStep {
+        index: 1,
+        description: format!("生成图片 — {prompt}"),
+        status: PlanStepStatus::Pending,
+        kind: PlanStepKind::ImageGeneration,
+    }]
+}
+
 /// 检测规划响应是否为"直接回答"格式并提取回答内容。
 ///
 /// 约定：模型在首行输出 `[直接回答]` 标记，其后（可带全/半角冒号）为给学生的回答。
@@ -647,5 +693,27 @@ mod tests {
         // 未提及时长时缺省 5 秒
         let default_steps = build_single_shot_video_steps("海浪", None);
         assert!(default_steps[0].description.contains("5秒"));
+    }
+
+    #[test]
+    fn test_wants_image_detection() {
+        assert!(wants_image("画一张海浪拍打礁石的图"));
+        assert!(wants_image("生成一张海浪拍打礁石的写实摄影照片"));
+        assert!(wants_image("做一张游戏海报"));
+        assert!(wants_image("帮我画一张头像"));
+        // 视频请求优先走视频快速路径
+        assert!(!wants_image("生成一段海浪视频"));
+        assert!(!wants_image("做一支产品宣传片"));
+        // 与视频无关的普通对话不误判
+        assert!(!wants_image("今天天气怎么样"));
+    }
+
+    #[test]
+    fn test_build_single_shot_image_steps() {
+        let steps = build_single_shot_image_steps("海浪拍打礁石的写实摄影照片");
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].kind, PlanStepKind::ImageGeneration);
+        assert_eq!(steps[0].index, 1);
+        assert!(steps[0].description.contains("海浪"));
     }
 }
