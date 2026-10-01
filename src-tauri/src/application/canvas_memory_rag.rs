@@ -671,12 +671,18 @@ pub fn ensure_canvas(workspace_path: &Path, conversation_id: &str) -> Option<Str
 pub fn add_canvas_note(
     workspace_path: &Path,
     conversation_id: &str,
-    flow_x: f64,
-    flow_y: f64,
+    flow_x: Option<f64>,
+    flow_y: Option<f64>,
     text: &str,
 ) -> Option<String> {
     let repo = open_repo(workspace_path)?;
     let canvas_id = ensure_canvas(workspace_path, conversation_id)?;
+    let nodes = repo.list_nodes(&canvas_id).ok().unwrap_or_default();
+    // 未指定坐标时智能落位，避免与现有节点重叠
+    let (flow_x, flow_y) = match (flow_x, flow_y) {
+        (Some(x), Some(y)) => (x, y),
+        _ => find_free_position(&nodes, 240.0, 160.0),
+    };
     let node = repo
         .add_node(NodeDraft {
             canvas_id,
@@ -720,10 +726,7 @@ pub fn add_canvas_image(
 
     let (x, y) = match (flow_x, flow_y) {
         (Some(x), Some(y)) => (x, y),
-        _ => match nodes.last() {
-            Some(last) => (last.position_x + 280.0, last.position_y),
-            None => (40.0, 40.0),
-        },
+        _ => find_free_position(&nodes, 240.0, 180.0),
     };
 
     let mut payload = serde_json::json!({ "imageUrl": image_url, "source": "agent" });
@@ -1031,6 +1034,78 @@ pub fn auto_connect_related(
         }
     }
     connected_count
+}
+
+/// 在现有节点包围盒之外寻找第一个空闲网格位（列优先扫描，280x260 步进）。
+/// 节点尺寸未知时按 240x180 近似，格间留 40px 间隙。
+fn find_free_position(nodes: &[MemoryNode], width: f64, height: f64) -> (f64, f64) {
+    let occupied = |x: f64, y: f64| {
+        nodes.iter().any(|n| {
+            let nw = n.width.unwrap_or(240.0);
+            let nh = n.height.unwrap_or(180.0);
+            x < n.position_x + nw + 40.0
+                && x + width + 40.0 > n.position_x
+                && y < n.position_y + nh + 40.0
+                && y + height + 40.0 > n.position_y
+        })
+    };
+    for col in 0..60usize {
+        for row in 0..60usize {
+            let (x, y) = (40.0 + col as f64 * 280.0, 40.0 + row as f64 * 260.0);
+            if !occupied(x, y) {
+                return (x, y);
+            }
+        }
+    }
+    (40.0, 40.0)
+}
+
+/// 画布现状摘要（Agent 系统提示用）：节点/连线数与最近节点概览。
+pub fn load_canvas_digest(workspace_path: &Path, conversation_id: &str) -> Option<String> {
+    let repo = open_repo(workspace_path)?;
+    let canvas_id = find_canvas_id(&repo, conversation_id)?;
+    let nodes: Vec<MemoryNode> = repo
+        .list_nodes(&canvas_id)
+        .ok()?
+        .iter()
+        .map(strip_heavy_payload)
+        .collect();
+    let edges = repo.list_edges(&canvas_id).ok().unwrap_or_default();
+    if nodes.is_empty() {
+        return Some("画布当前为空。".to_owned());
+    }
+    let recent: Vec<String> = nodes
+        .iter()
+        .rev()
+        .take(3)
+        .map(|n| {
+            let display = node_display_text(n.summary.as_deref(), &n.payload_json);
+            format!("- [{}] {}", n.node_type, truncate_chars(&display, 40))
+        })
+        .collect();
+    Some(format!(
+        "画布当前有 {} 个节点、{} 条连线；最近添加：
+{}",
+        nodes.len(),
+        edges.len(),
+        recent.join(
+            "
+"
+        )
+    ))
+}
+
+/// 画布规模统计（工具结果增强用）。
+pub fn canvas_stats(workspace_path: &Path, conversation_id: &str) -> (usize, usize) {
+    let Some(repo) = open_repo(workspace_path) else {
+        return (0, 0);
+    };
+    let Some(canvas_id) = find_canvas_id(&repo, conversation_id) else {
+        return (0, 0);
+    };
+    let nodes = repo.list_nodes(&canvas_id).map(|n| n.len()).unwrap_or(0);
+    let edges = repo.list_edges(&canvas_id).map(|e| e.len()).unwrap_or(0);
+    (nodes, edges)
 }
 
 /// 删除指定对话的画布（对话删除时级联，软删）。
@@ -1527,8 +1602,7 @@ pub fn ensure_generation_image_node(
                     truncate_chars(trimmed, 50)
                 }
             };
-            let position_x = nodes.last().map(|n| n.position_x + 280.0).unwrap_or(40.0);
-            let position_y = nodes.last().map(|n| n.position_y).unwrap_or(40.0);
+            let (position_x, position_y) = find_free_position(&nodes, 240.0, 180.0);
             repo.add_node(NodeDraft {
                 canvas_id: canvas_id.clone(),
                 node_type: "image".to_owned(),
@@ -2120,8 +2194,8 @@ mod tests {
         let node_id = add_canvas_note(
             &workspace,
             &conversation_id,
-            200.0,
-            200.0,
+            Some(200.0),
+            Some(200.0),
             "项目主线是暗色调科技感",
         )
         .expect("note creation");

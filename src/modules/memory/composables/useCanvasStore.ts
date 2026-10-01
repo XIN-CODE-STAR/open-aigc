@@ -274,6 +274,18 @@ export function createCanvasStore(ipc: CanvasStoreIpc = bridgeIpc) {
     }
   }
 
+  /** Agent 画布工具直接写库后的实时刷新（与前端状态对齐）。 */
+  async function refreshNodes(): Promise<void> {
+    const cid = canvasId.value;
+    if (!cid) return;
+    try {
+      nodes.value = await ipc.listNodes(cid);
+      edges.value = await ipc.listEdges(cid);
+    } catch (e) {
+      console.warn("[CanvasStore] refresh nodes failed:", e);
+    }
+  }
+
   async function saveViewport(zoom: number, x: number, y: number): Promise<void> {
     if (!canvasId.value) return;
     viewport.value = { zoom, x, y };
@@ -689,6 +701,7 @@ export function createCanvasStore(ipc: CanvasStoreIpc = bridgeIpc) {
     // 边 mutations
     connectNodes,
     reconnectEdge,
+    refreshNodes,
     removeEdge,
     // payload mutations
     updateNoteText,

@@ -673,6 +673,15 @@ watch(
     for (const inv of invocations) {
       const prev = prevInvocationStatuses.value.get(inv.id);
 
+      // Agent 画布工具（直写后端）成功后实时刷新画布内容
+      if (
+        inv.toolName?.startsWith("canvas_") &&
+        inv.status === "succeeded" &&
+        prev !== "succeeded"
+      ) {
+        memoryCanvasRef.value?.refreshNodes();
+      }
+
       // 当任务开始执行时，添加 pending 节点
       if (inv.status === "running" && prev !== "running") {
         const prompt: string = inv.argumentsJson

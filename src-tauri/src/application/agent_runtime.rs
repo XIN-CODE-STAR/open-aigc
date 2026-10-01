@@ -425,6 +425,14 @@ impl AgentRuntime {
             "[AgentRuntime] starting execution phase, plan steps={}",
             plan.steps.len()
         );
+        // 画布现状摘要提供者：每步实时读取（Agent 会边执行边改画布）
+        let canvas_workspace = self.database_path.clone();
+        let canvas_digest_provider = || {
+            crate::application::canvas_memory_rag::load_canvas_digest(
+                &canvas_workspace,
+                conversation_id,
+            )
+        };
         let result = self.execution_engine.run_execution_phase(
             app,
             conversation_id,
@@ -435,6 +443,7 @@ impl AgentRuntime {
             &credential.model_name,
             memory_context.as_deref(),
             &self.planning_engine,
+            &canvas_digest_provider,
         );
         match &result {
             Ok(r) => eprintln!(

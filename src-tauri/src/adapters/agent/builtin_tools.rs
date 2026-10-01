@@ -1282,13 +1282,11 @@ fn execute_canvas_add_note(
         y: Option<f64>,
     }
     let args: Args = parse_arguments(TOOL_CANVAS_ADD_NOTE, arguments)?;
-    let x = args.x.unwrap_or(200.0);
-    let y = args.y.unwrap_or(200.0);
     let node_id = crate::application::canvas_memory_rag::add_canvas_note(
         &ctx.workspace_path,
         &ctx.conversation_id,
-        x,
-        y,
+        args.x,
+        args.y,
         &args.text,
     );
     // P4：语义自动连线
@@ -1304,12 +1302,22 @@ fn execute_canvas_add_note(
             )
         })
         .unwrap_or(0);
+    let (node_count, edge_count) = crate::application::canvas_memory_rag::canvas_stats(
+        &ctx.workspace_path,
+        &ctx.conversation_id,
+    );
     let payload = serde_json::json!({
         "ok": node_id.is_some(),
         "nodeId": node_id,
         "autoConnected": connected,
+        "canvasDigest": { "nodes": node_count, "edges": edge_count },
+        "nextSuggestions": [
+            "用 canvas_connect 把新便签与相关节点连线（建立上下文关联）",
+            "继续创建更多便签记录其他结论",
+            "节点杂乱时用 canvas_auto_layout 整理"
+        ],
         "message": if node_id.is_some() {
-            format!("已在画布上创建便签，并自动关联了 {connected} 个相关节点。")
+            format!("已在画布上创建便签，并自动关联了 {connected} 个相关节点。画布现有 {node_count} 个节点。")
         } else {
             "画布节点创建失败。".to_owned()
         }
@@ -1419,12 +1427,21 @@ fn execute_canvas_add_image(
             )
         })
         .unwrap_or(0);
+    let (node_count, edge_count) = crate::application::canvas_memory_rag::canvas_stats(
+        &ctx.workspace_path,
+        &ctx.conversation_id,
+    );
     let payload = serde_json::json!({
         "ok": node_id.is_some(),
         "nodeId": node_id,
         "autoConnected": connected,
+        "canvasDigest": { "nodes": node_count, "edges": edge_count },
+        "nextSuggestions": [
+            "用 canvas_connect 把图片与相关便签连线",
+            "需要补充说明时用 canvas_update_node"
+        ],
         "message": if node_id.is_some() {
-            format!("已在画布上创建图片节点，并自动关联了 {connected} 个相关节点。")
+            format!("已在画布上创建图片节点，并自动关联了 {connected} 个相关节点。画布现有 {node_count} 个节点。")
         } else {
             "画布图片节点创建失败。".to_owned()
         }

@@ -83,6 +83,7 @@ impl ExecutionEngine {
         model_name: &str,
         memory_context: Option<&str>,
         planning_engine: &super::planning_engine::PlanningEngine,
+        canvas_digest_provider: &dyn Fn() -> Option<String>,
     ) -> Result<SendMessageResult, AppError> {
         let mut total_iterations = 0u8;
         let mut last_assistant: Option<MessageRecord> = None;
@@ -113,12 +114,15 @@ impl ExecutionEngine {
             );
 
             // 构建执行阶段系统提示词（静态前缀 + 动态尾部，含记忆注入）。
+            // 画布现状每步实时取（Agent 会边执行边改画布）。
+            let canvas_digest = canvas_digest_provider();
             let exec_prompt = build_execution_system_prompt(
                 &plan.goal,
                 step,
                 &current_plan.steps,
                 memory_context,
                 conversation.system_prompt.as_deref(),
+                canvas_digest.as_deref(),
             );
 
             // 执行当前步骤的工具循环。
@@ -790,7 +794,18 @@ const EXECUTION_STATIC_PREFIX: &str =
     可用工具：\n\
     - image_generation(prompt): 生成图片，传入详细的图片描述提示词\n\
     - video_generation(prompt): 生成视频，传入详细的视频描述提示词\n\
+    - canvas_add_note(text): 在画布上创建纯文字便签，记录信息/结论/待办\n\
+    - canvas_search(query): 检索画布上的已有内容\n\
+    - canvas_connect(sourceQuery, targetQuery): 在两个节点间建立语义连线\n\
+    - canvas_update_node(nodeId, text): 更新画布便签内容\n\
+    - canvas_auto_layout(): 自动整理画布布局\n\
     - current_time(): 获取当前时间\n\
+    - ask_user_question(question): 向用户提问\n\
+    \n\
+    画布工作记忆使用规范（重要）：\n\
+    - 记录文字信息、结论、待办、偏好时，必须用 canvas_add_note（文字便签），绝不要用图片生成来“画”文字内容。\n\
+    - 只有用户明确要求生成图像/图片/插画时才用 image_generation。\n\
+    - 自主多步工作模式：先 canvas_search 了解画布现状 → 执行创建/更新 → 用 canvas_connect 把相关节点连线 → 根据工具返回的 canvasDigest 和 nextSuggestions 继续推进，直到完成用户目标。\n\
     - ask_user_question(question): 向用户提问";
 
 /// 构建执行阶段系统提示词。
@@ -813,6 +828,7 @@ fn build_execution_system_prompt(
     all_steps: &[PlanStep],
     memory_context: Option<&str>,
     user_system_prompt: Option<&str>,
+    canvas_digest: Option<&str>,
 ) -> String {
     let steps_list: String = all_steps
         .iter()
@@ -842,6 +858,13 @@ fn build_execution_system_prompt(
             prompt.push_str("\n\n[相关记忆]\n");
             prompt.push_str(mem);
             prompt.push_str("\n请在执行时参考以上记忆，贴合学生偏好。");
+        }
+    }
+
+    if let Some(digest) = canvas_digest {
+        if !digest.trim().is_empty() {
+            prompt.push_str("\n\n[画布现状]\n");
+            prompt.push_str(digest);
         }
     }
 

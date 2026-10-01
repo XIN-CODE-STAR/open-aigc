@@ -92,6 +92,7 @@ const {
   deleteSelected,
   connectNodes,
   reconnectEdge,
+  refreshNodes,
   updateNoteText,
   cycleNoteColor,
   resizeNode,
@@ -119,15 +120,32 @@ function setTool(tool: CanvasTool): void {
 }
 
 /** 便签模式下点击空白创建后保持模式；图片模式选完文件后回到选择模式。 */
-function onPaneClick(event: MouseEvent): void {
+async function onPaneClick(event: MouseEvent): Promise<void> {
   if (canvasTool.value === "select") return;
   const flow = screenToFlowCoordinate({ x: event.clientX, y: event.clientY });
   if (canvasTool.value === "note") {
-    void addNoteNodeAt(flow.x, flow.y);
+    const note = await addNoteNodeAt(flow.x, flow.y);
+    centerOnNode(note);
     return;
   }
   canvasTool.value = "select";
   void pickAndAddImages();
+}
+
+// ── 新节点反馈：自动居中 + 出现高亮（便签交互打磨） ───
+
+const newestNodeId = ref<string | null>(null);
+let newestNodeTimer: number | undefined;
+
+function centerOnNode(node: MemoryNode | null): void {
+  if (!node) return;
+  const { zoom } = getViewport();
+  setCenter(node.positionX + 110, node.positionY + 80, { zoom, duration: 220 });
+  newestNodeId.value = node.id;
+  if (newestNodeTimer) window.clearTimeout(newestNodeTimer);
+  newestNodeTimer = window.setTimeout(() => {
+    newestNodeId.value = null;
+  }, 1600);
 }
 
 // ── 画布视觉（Phase 4）：网格样式 / 边描线动画 / hover 高亮两端 ───
@@ -213,6 +231,8 @@ const nodeMenuItems = computed<CanvasMenuItem[]>(() => {
 const {
   fitView,
   setViewport,
+  setCenter,
+  getViewport,
   screenToFlowCoordinate,
   addSelectedElements,
   onNodeDragStop,
@@ -343,6 +363,7 @@ async function pasteNodes(at?: { x: number; y: number }): Promise<void> {
   const created = await cloneNodes(sources, { x: dx, y: dy });
   if (created.length === 0) return;
   selectNodes(created.map((n) => n.id));
+  centerOnNode(created[0]);
   toast.success(`已粘贴 ${created.length} 个节点。`);
 }
 
@@ -495,8 +516,10 @@ function openNodeMenu(id: string, clientX: number, clientY: number): void {
 async function onPaneMenuSelect(action: string): Promise<void> {
   const menu = canvasMenu.value;
   if (!menu) return;
-  if (action === "note") await addNoteNodeAt(menu.flowX, menu.flowY);
-  else if (action === "image") void pickAndAddImages();
+  if (action === "note") {
+    const note = await addNoteNodeAt(menu.flowX, menu.flowY);
+    centerOnNode(note);
+  } else if (action === "image") void pickAndAddImages();
   else if (action === "selectAll") selectAllElements();
   else if (action === "paste") await pasteNodes({ x: menu.flowX, y: menu.flowY });
 }
@@ -505,7 +528,7 @@ async function onPaneMenuSelect(action: string): Promise<void> {
 
 function onPaneDblClick(event: MouseEvent): void {
   const flow = screenToFlowCoordinate({ x: event.clientX, y: event.clientY });
-  void addNoteNodeAt(flow.x, flow.y);
+  void addNoteNodeAt(flow.x, flow.y).then(centerOnNode);
 }
 
 // ── 剪贴板粘贴（Ctrl+V）：图片优先，其次粘贴已复制的节点 ──
@@ -653,7 +676,13 @@ const flowNodes = computed(() =>
       id: n.id,
       type: "canvasCard" as const,
       position: { x: n.positionX, y: n.positionY },
-      class: edgeHoverEndpoints.value.has(n.id) ? "edge-endpoint-highlight" : undefined,
+      class:
+        [
+          edgeHoverEndpoints.value.has(n.id) ? "edge-endpoint-highlight" : undefined,
+          newestNodeId.value === n.id ? "node-just-added" : undefined,
+        ]
+          .filter(Boolean)
+          .join(" ") || undefined,
       data: {
         nodeType: n.nodeType,
         summary: n.summary,
@@ -752,6 +781,7 @@ defineExpose({
   addGenerationNode,
   addUploadNode,
   addEdgeBetweenNodes: connectNodes,
+  refreshNodes,
   setNodeStatus,
   setNodeImageUrl,
   findRecentNodesByType,
@@ -1157,6 +1187,24 @@ function getNodeColor(type: string | undefined): string {
   stroke: #818cf8;
   stroke-width: 3;
   filter: drop-shadow(0 0 4px rgb(129 140 248 / 50%));
+}
+
+/* 新创建节点：出现脉冲（便签交互反馈） */
+.memory-canvas .vue-flow__node.node-just-added .canvas-node {
+  animation: node-appear 1.5s var(--ease-out, ease-out);
+}
+
+@keyframes node-appear {
+  0% {
+    box-shadow:
+      0 0 0 4px rgb(129 140 248 / 75%),
+      0 0 30px rgb(129 140 248 / 50%);
+    transform: scale(1.06);
+  }
+  100% {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.24);
+    transform: scale(1);
+  }
 }
 
 /* 选中节点：细 ring + 柔光 */
