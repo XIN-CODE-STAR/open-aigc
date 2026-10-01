@@ -469,6 +469,40 @@ impl AgentRepository for SqliteAgentRepository {
         Ok(record)
     }
 
+    fn find_invocation_by_generation_task(
+        &mut self,
+        generation_task_id: &str,
+    ) -> Result<Option<ToolInvocationRecord>, AgentRepositoryError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                r#"
+                SELECT id, message_id, conversation_id, tool_name, arguments_json,
+                       result_json, status, error_message, generation_task_id,
+                       started_at, completed_at, created_at
+                FROM agent_tool_invocations
+                WHERE generation_task_id = ?1
+                ORDER BY created_at DESC
+                LIMIT 1
+                "#,
+            )
+            .map_err(|e| PersistenceError::new("prepare invocation lookup by task", e))?;
+        let mut rows = statement
+            .query(params![generation_task_id])
+            .map_err(|e| PersistenceError::new("query invocation by task", e))?;
+        match rows
+            .next()
+            .map_err(|e| PersistenceError::new("invocation by task row", e))?
+        {
+            Some(row) => {
+                Ok(Some(map_invocation(row).map_err(|e| {
+                    PersistenceError::new("invocation by task map", e)
+                })?))
+            }
+            None => Ok(None),
+        }
+    }
+
     fn list_invocations(
         &mut self,
         conversation_id: &str,

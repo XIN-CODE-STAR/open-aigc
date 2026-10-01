@@ -100,6 +100,16 @@ pub struct GenerationPipeline {
     config: PipelineConfig,
 }
 
+/// 回填 Agent 工具调用结果所需的最小上下文。
+struct InvocationBackfill<'a> {
+    task_id: &'a str,
+    attempt_id: &'a str,
+    result_url: &'a str,
+    file_path: &'a str,
+    asset_id: &'a str,
+    mime_type: &'a str,
+}
+
 impl GenerationPipeline {
     pub fn new(
         download_dir: PathBuf,
@@ -265,7 +275,25 @@ impl GenerationPipeline {
         Self::emit_stage(app, attempt_id, "guarding", None);
         let guard_result = run_content_guard_check(project_id, attempt_id, &download.mime_type);
 
-        // ── Stage 7: 完成 ──────────────────────────────
+        // ── Stage 7: 回填 Agent 工具调用结果 ─────────
+        // 发起本次生成的 agent 工具调用在提交时只知道"已提交"；生成完成后
+        // 把产物本地路径与远端结果写回该调用的 result_json，对话时间线才能
+        // 渲染图片/视频（前端 extractImageUrls/extractVideoUrls 读取
+        // attempt/localAsset 字段）。非阻塞：回填失败只影响对话展示。
+        Self::backfill_agent_invocation(
+            app,
+            self.database_path.as_deref(),
+            &InvocationBackfill {
+                task_id,
+                attempt_id,
+                result_url,
+                file_path: &download.file_path,
+                asset_id: &asset_id,
+                mime_type: &download.mime_type,
+            },
+        );
+
+        // ── Stage 8: 完成 ──────────────────────────────
         Self::emit_stage(app, attempt_id, "completed", None);
         Ok(PipelineOutput {
             asset_id,
@@ -286,6 +314,80 @@ impl GenerationPipeline {
                 detail,
             };
             let _ = handle.emit("generation://stage", &event);
+        }
+    }
+
+    /// 回填发起本次生成的 Agent 工具调用结果。
+    ///
+    /// invocation 的 result_json 在提交时只有"已提交"占位；生成完成后按
+    /// generation_task_id 定位调用记录，把最终产物本地路径与远端结果合并
+    /// 写回（前端据此渲染对话内图片/视频），并推送调用刷新事件。非阻塞：
+    /// 回填失败只影响对话展示，不影响资产入库。
+    fn backfill_agent_invocation(
+        app: Option<&AppHandle>,
+        database_path: Option<&std::path::Path>,
+        ctx: &InvocationBackfill,
+    ) {
+        use crate::ports::agent_repository::AgentRepository;
+        let Some(db_path) = database_path else {
+            return;
+        };
+        let mut agent_repo = match crate::adapters::sqlite::SqliteAgentRepository::open(db_path) {
+            Ok(repo) => repo,
+            Err(e) => {
+                eprintln!("[Pipeline] invocation backfill: agent repo open failed: {e}");
+                return;
+            }
+        };
+        let invocation = match agent_repo.find_invocation_by_generation_task(ctx.task_id) {
+            Ok(Some(invocation)) => invocation,
+            Ok(None) => return, // 非 Agent 发起的生成（如创意工坊直接任务），无回填目标
+            Err(e) => {
+                eprintln!("[Pipeline] invocation backfill: lookup failed: {e}");
+                return;
+            }
+        };
+
+        let mut payload = invocation
+            .result_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+        payload["attempt"] = serde_json::json!({
+            "id": ctx.attempt_id,
+            "status": "succeeded",
+            "resultUrl": ctx.result_url,
+        });
+        payload["localAsset"] = serde_json::json!({
+            "filePath": ctx.file_path,
+            "assetId": ctx.asset_id,
+            "mimeType": ctx.mime_type,
+        });
+
+        match agent_repo.update_invocation_status(
+            &invocation.id,
+            invocation.status,
+            Some(payload.to_string()),
+            None,
+            None,
+        ) {
+            Ok(updated) => {
+                eprintln!(
+                    "[Pipeline] agent invocation backfilled: {} (task {})",
+                    invocation.id, ctx.task_id
+                );
+                if let Some(handle) = app {
+                    crate::application::agent_service::emit_event(
+                        handle,
+                        &invocation.conversation_id,
+                        crate::application::agent_service::AgentEvent::ToolInvocationUpdated {
+                            conversation_id: invocation.conversation_id.clone(),
+                            invocation: updated,
+                        },
+                    );
+                }
+            }
+            Err(e) => eprintln!("[Pipeline] invocation backfill update failed: {e}"),
         }
     }
 

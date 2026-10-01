@@ -84,6 +84,14 @@ pub trait AgentRepository: Send {
         generation_task_id: Option<String>,
     ) -> Result<ToolInvocationRecord, AgentRepositoryError>;
 
+    /// 按生成任务 ID 查找工具调用记录。
+    /// 生成完成回填对话展示时定位发起本次生成的调用（00:51 复盘：
+    /// invocation 停留在提交时快照，完成侧无人回填导致对话不显示产物）。
+    fn find_invocation_by_generation_task(
+        &mut self,
+        generation_task_id: &str,
+    ) -> Result<Option<ToolInvocationRecord>, AgentRepositoryError>;
+
     fn list_invocations(
         &mut self,
         conversation_id: &str,
