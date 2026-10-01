@@ -96,24 +96,31 @@ function extractImageUrls(resultJson: string | null): string[] {
   if (!resultJson) return [];
   try {
     const data = JSON.parse(resultJson);
+    const urls: string[] = [];
 
-    // 优先使用远程 URL（始终可用）
+    // 工具提交载荷自带最终 URL（同步通道即时返回）
+    if (typeof data.imageUrl === "string" && data.imageUrl.startsWith("http")) {
+      urls.push(data.imageUrl);
+    }
+
+    // 优先使用远程 URL（异步完成侧回填）
     const remoteId = data.attempt?.remoteJobId || "";
     const remoteUrl = remoteId.replace(/^proxy:image:/, "").replace(/^image:/, "");
-    if (remoteUrl && remoteUrl.startsWith("http")) {
-      return [remoteUrl];
+    if (remoteUrl && remoteUrl.startsWith("http") && !urls.includes(remoteUrl)) {
+      urls.push(remoteUrl);
     }
 
     // 本地资产路径（备用）
     if (data.localAsset?.filePath) {
       try {
-        return [convertFileSrc(data.localAsset.filePath)];
+        const local = convertFileSrc(data.localAsset.filePath);
+        if (!urls.includes(local)) urls.push(local);
       } catch {
         // ignore
       }
     }
 
-    return [];
+    return urls;
   } catch {
     return [];
   }
