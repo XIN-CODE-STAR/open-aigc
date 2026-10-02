@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
 
+import { invoke } from "@tauri-apps/api/core";
+
 import type { ResourceAccountRecord } from "../../../bridge/resourceAccounts";
 import ModalDialog from "../../../shared/ui/ModalDialog.vue";
 
@@ -31,9 +33,45 @@ const ACCOUNT_PRESETS = [
     modelName: "jimeng-4.5",
     loginUrl: "https://jimeng.jianying.com/ai-tool/image/generate",
     helpText:
-      "登录即梦网页版后，按 F12 打开开发者工具 → Application → Cookies → 复制 sessionid 的值。",
+      "点击上方按钮登录即梦网页版，然后 F12 → Network → 随便一个请求 → 复制整段 Cookie 粘贴到这里（自动识别 sessionid）；也可以只粘贴 sessionid 的值。",
   },
 ];
+
+/**
+ * 从粘贴内容中容错提取 sessionid：支持整段 Cookie、`Cookie:` 前缀、
+ * 换行分隔与纯 token。解析规则与 jimeng-free-api 账号池保持一致，
+ * 用户复制什么格式都能识别。
+ */
+function extractSessionId(raw: string): string {
+  const normalized = raw
+    .trim()
+    .replace(/^\s*cookie\s*:\s*/i, "")
+    .replace(/[\r\n]+/g, ";");
+  const pairs = new Map<string, string>();
+  for (const item of normalized.split(";")) {
+    const separator = item.indexOf("=");
+    if (separator < 0) continue;
+    const key = item.slice(0, separator).trim().toLowerCase();
+    const value = item.slice(separator + 1).trim();
+    if (key && value) pairs.set(key, value);
+  }
+  const value =
+    pairs.get("sessionid") ||
+    pairs.get("sessionid_ss") ||
+    pairs.get("sid_tt") ||
+    pairs.get("sid_guard")?.split("%7C")[0] ||
+    pairs.get("sid_guard")?.split("|")[0] ||
+    "";
+  if (value) return value;
+  // 无键值对时接受纯 token（从接口或他人转发中直接复制的场景）
+  if (!normalized.includes("=") && /^[^\s;]+$/.test(normalized)) return normalized;
+  return "";
+}
+
+function maskSessionId(value: string): string {
+  if (value.length <= 8) return `${value.length} 位`;
+  return `${value.slice(0, 4)}…${value.slice(-4)}（${value.length} 位）`;
+}
 
 const selectedPreset = ref(0);
 const sessionCookie = ref("");
@@ -46,6 +84,15 @@ const preset = computed(() => ACCOUNT_PRESETS[selectedPreset.value]);
 const form = reactive({
   displayName: "",
 });
+
+// 实时解析粘贴内容，识别到 sessionid 时给出脱敏预览
+const detectedSessionId = computed(() => extractSessionId(sessionCookie.value));
+
+function openLoginPage(): void {
+  void invoke("open_file_with_system_viewer", { path: preset.value.loginUrl }).catch((err) => {
+    console.error("[account-dialog] 打开登录页失败:", err);
+  });
+}
 
 // 编辑模式下预填表单
 watch(
@@ -69,9 +116,13 @@ watch(
 const canSubmit = computed(() => {
   if (isEditMode.value) {
     // 编辑模式：显示名称非空即可（Session 可选更新）
-    return form.displayName.trim().length > 0 && !busy.value;
+    return (
+      form.displayName.trim().length > 0 &&
+      (sessionCookie.value.trim().length === 0 || !!detectedSessionId.value) &&
+      !busy.value
+    );
   }
-  return sessionCookie.value.trim().length > 0 && !busy.value;
+  return !!detectedSessionId.value && !busy.value;
 });
 
 function handleSubmit(): void {
@@ -83,7 +134,7 @@ function handleSubmit(): void {
     displayName: displayName,
     baseUrl: p.baseUrl,
     modelName: p.modelName,
-    sessionCookie: sessionCookie.value.trim(),
+    sessionCookie: detectedSessionId.value,
   });
 }
 
@@ -127,16 +178,27 @@ function handleClose(): void {
 
       <div class="field">
         <span class="field__label">
-          Session ID
+          即梦 Cookie / Session ID
           <span v-if="isEditMode" class="field__optional">（留空则不更新）</span>
         </span>
         <textarea
           v-model="sessionCookie"
           class="field__textarea"
           rows="3"
-          :placeholder="isEditMode ? '粘贴新的 Session ID 以更新...' : '粘贴 sessionid 值...'"
+          :placeholder="
+            isEditMode
+              ? '粘贴新的 Cookie 或 sessionid 以更新...'
+              : '粘贴整段 Cookie 或仅 sessionid 值...'
+          "
         />
-        <p v-if="!isEditMode" class="field__help">{{ preset.helpText }}</p>
+        <p v-if="detectedSessionId" class="field__detected">
+          已识别 sessionid：{{ maskSessionId(detectedSessionId) }}
+        </p>
+        <p v-else-if="sessionCookie.trim()" class="field__detected field__detected--warn">
+          未识别到 sessionid，请检查粘贴内容
+        </p>
+        <p class="field__help">{{ preset.helpText }}</p>
+        <button class="login-link" type="button" @click="openLoginPage">打开即梦登录页 ↗</button>
       </div>
 
       <div class="security-note">
@@ -222,6 +284,33 @@ function handleClose(): void {
   color: var(--color-text-tertiary);
   font-size: var(--text-caption);
   line-height: 1.4;
+}
+
+.field__detected {
+  margin: 0;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+}
+
+.field__detected--warn {
+  color: var(--color-text-tertiary);
+  font-family: inherit;
+}
+
+.login-link {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font-size: var(--text-caption);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.login-link:hover {
+  opacity: 0.85;
 }
 
 .field__optional {
