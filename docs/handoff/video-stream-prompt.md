@@ -123,3 +123,18 @@
 - **导出链**：`generation_pipeline` Stage 3b 按类型无差别导出，无需改动，video 尝试自动落 `generated/<对话标题>/`。
 - **门禁**：`pnpm check` / `rust-test.mjs`（524 通过，含 4 个新规划测试）/ `clippy -D warnings` 全绿。
 - **待真机验收**：应用内输入"生成一段 5 秒的海浪视频"→ 对话内可播放 → 资产库可见 → 工作目录有 mp4（需要已配置的视频凭据，计费真实发生）。
+
+### 迭代 loop（10/1-10/2，4013 风控攻坚 + 现场问题修复）
+
+现场测试暴露并修复的问题（均已提交）：
+- **代理整体替换**：旧 iptag/jimeng-api（D:\jimeng-api 部署，v1.6.3，已归档）被其开机自启拉回抢占 5100，替换为 **zhizinan1997/jimeng-free-api-all v1.2.7 便携版**（API 兼容免改连接器，sha256 校验，端口 5100）；自启 vbs 已同步切换（旧项改名 .disabled 可逆）。新代理运行时目录 `services/jimeng-free-api-all/` 已 gitignore。
+- **完成后回填**：invocation 的 result_json 停留在提交时占位导致对话不显示产物——生成管线新增回填阶段（按 generation_task_id 定位调用记录，写回 attempt/localAsset + 推送 ToolInvocationUpdated）。
+- **时间线提取补 imageUrl**：同步通道的提交载荷自带最终 URL，前端提取器此前只认异步回填字段。
+- **图片单步快速路径 + 提交失败短路**：镜像 D7 消除单图多步刷屏；提交被拒后终止剩余步骤（已有成功产出时保持部分成功语义）。
+- **video 工具 schema 对齐多模型编排设计**：providerName/modelName 改可选（编排者无需知道生成模型名）。
+- **健康检查 jm_ Key 兼容**：jm_ 托管 Key 不再被误标 need_login。
+
+**4013 风控排查结论（迭代 loop 模型族全面判别，10/2）**：
+同一会话、同一端点 `/mweb/v1/aigc_draft/generate`：图片（high_aes_general_v50）两次 ret=0 成功；视频各模型族实测——**seedance-2.0 通道（dreamina_seedance_40_pro）稳定 4013**（跨两套代理、4 天复现）；**seedance-2.5 / 2.0-mini / wan-3.0 / minimax-h3 / happyhorse-1.1 全部通过风控**到达积分校验；3.0 标准版已下线（2061）。据此连接器默认视频模型已切 **seedance-2.5**（ff7ebe3）。
+
+**当前唯一阻塞：即梦账户视频积分余额**。账户 totalCredit=66（每日赠送），但视频各模型族降级到最低档仍 -2009 积分不足（视频权益池与图片赠送积分可能不通用）。解决途径：即梦充值积分 / 开通 VIP / 等待赠送刷新后由 loop 自动重试。视频一旦生成成功，展示/入库/导出链路已全部就绪。
