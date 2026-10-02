@@ -17,7 +17,7 @@
  */
 import { onMounted, onUnmounted, ref, watch, computed, nextTick } from "vue";
 import { VueFlow, useVueFlow } from "@vue-flow/core";
-import type { GraphNode } from "@vue-flow/core";
+import type { EdgeMouseEvent, GraphNode } from "@vue-flow/core";
 import { Background } from "@vue-flow/background";
 import { Controls } from "@vue-flow/controls";
 import { MiniMap } from "@vue-flow/minimap";
@@ -130,6 +130,55 @@ async function onPaneClick(event: MouseEvent): Promise<void> {
   }
   canvasTool.value = "select";
   void pickAndAddImages();
+}
+
+// ── 节点搜索定位（Ctrl+F）：大画布上快速找到内容 ───
+
+const searchOpen = ref(false);
+const searchQuery = ref("");
+const searchInputRef = ref<HTMLInputElement | null>(null);
+
+const searchResults = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) return [];
+  return nodes.value
+    .filter((n) => `${n.summary ?? ""} ${n.payloadJson}`.toLowerCase().includes(query))
+    .slice(0, 8);
+});
+
+function openSearch(): void {
+  searchOpen.value = true;
+  searchQuery.value = "";
+  void nextTick(() => searchInputRef.value?.focus());
+}
+
+function jumpToNode(node: MemoryNode): void {
+  centerOnNode(node);
+  searchOpen.value = false;
+}
+
+// ── 连线右键菜单：删除连线的可发现入口 ───
+
+const edgeMenu = ref<{ id: string; x: number; y: number } | null>(null);
+const edgeMenuItems = computed<CanvasMenuItem[]>(() => [
+  { key: "delete", label: "删除连线", danger: true },
+]);
+
+function onEdgeContextMenu(event: EdgeMouseEvent): void {
+  // 触摸事件没有 clientX/Y，忽略（右键菜单仅鼠标触发）
+  if (!("clientX" in event.event)) return;
+  event.event.preventDefault();
+  canvasMenu.value = null;
+  nodeMenu.value = null;
+  edgeMenu.value = { id: event.edge.id, x: event.event.clientX, y: event.event.clientY };
+}
+
+function onEdgeMenuSelect(action: string): void {
+  const menu = edgeMenu.value;
+  if (!menu) return;
+  if (action === "delete") {
+    void removeEdge(menu.id).then(() => toast.info("已删除连线，Ctrl+Z 可撤销。", 2500));
+  }
 }
 
 // ── 新节点反馈：自动居中 + 出现高亮（便签交互打磨） ───
@@ -283,7 +332,9 @@ function onCanvasKeydown(event: KeyboardEvent): void {
   const key = event.key.toLowerCase();
 
   if (key === "escape") {
-    if (nodeMenu.value || canvasMenu.value) {
+    if (searchOpen.value) {
+      searchOpen.value = false;
+    } else if (nodeMenu.value || canvasMenu.value) {
       nodeMenu.value = null;
       canvasMenu.value = null;
     } else if (helpOpen.value) {
@@ -301,6 +352,9 @@ function onCanvasKeydown(event: KeyboardEvent): void {
       event.preventDefault();
       if (event.shiftKey) redo();
       else undo();
+    } else if (key === "f") {
+      event.preventDefault();
+      openSearch();
     } else if (key === "c") {
       copySelectedNodes(event);
     } else if (key === "a") {
@@ -652,7 +706,7 @@ function saveNoteLocal(id: string, text: string): void {
 }
 
 function removeNodeCb(id: string): void {
-  void removeNode(id);
+  void removeNode(id).then(() => toast.info("已删除节点，Ctrl+Z 可撤销。", 2500));
 }
 
 // Persist node position on drag end（防抖合并与命令入栈在 store）
@@ -692,6 +746,10 @@ const flowNodes = computed(() =>
         size,
         editSignal: editSignals.value[n.id] ?? 0,
         onContextMenu: (clientX: number, clientY: number) => openNodeMenu(n.id, clientX, clientY),
+        onPreview: () => {
+          const url = nodeDataUrl(n);
+          if (url) lightboxUrl.value = url;
+        },
         onDelete: () => removeNodeCb(n.id),
         onSaveSummary: (text: string) => saveNoteLocal(n.id, text),
         onResize: (width: number, height?: number) => void resizeNode(n.id, width, height),
@@ -849,6 +907,7 @@ defineExpose({
         :only-render-visible-elements="nodes.length > 40"
         :delete-key-code="['Backspace', 'Delete']"
         @pane-click="onPaneClick"
+        @edge-context-menu="onEdgeContextMenu"
         @pane-double-click="onPaneDblClick"
       >
         <template #node-canvasCard="nodeProps">
@@ -884,6 +943,16 @@ defineExpose({
           :items="nodeMenuItems"
           @select="onNodeMenuSelect"
           @close="nodeMenu = null"
+        />
+
+        <!-- 连线右键菜单（统一组件） -->
+        <CanvasContextMenu
+          v-if="edgeMenu"
+          :x="edgeMenu.x"
+          :y="edgeMenu.y"
+          :items="edgeMenuItems"
+          @select="onEdgeMenuSelect"
+          @close="edgeMenu = null"
         />
 
         <!-- 快捷键帮助 -->
@@ -1016,6 +1085,36 @@ defineExpose({
             <X :size="14" />
           </button>
         </header>
+
+        <!-- 节点搜索（Ctrl+F） -->
+        <div v-if="searchOpen" class="canvas-search">
+          <input
+            ref="searchInputRef"
+            v-model="searchQuery"
+            class="canvas-search__input"
+            type="text"
+            placeholder="搜索节点内容（便签/图片/摘要）…"
+            @keydown.enter.prevent="jumpToNode(searchResults[0] ?? null)"
+          />
+          <div
+            v-if="searchQuery.trim() !== '' && searchResults.length === 0"
+            class="canvas-search__empty"
+          >
+            无匹配节点
+          </div>
+          <button
+            v-for="n in searchResults"
+            :key="n.id"
+            class="canvas-search__item"
+            type="button"
+            @click="jumpToNode(n)"
+          >
+            <span class="canvas-search__type" :style="{ color: getNodeColor(n.nodeType) }">
+              {{ n.nodeType }}
+            </span>
+            <span class="canvas-search__text">{{ n.summary || "（无摘要）" }}</span>
+          </button>
+        </div>
 
         <!-- 底部工具 dock（tldraw 式，图标 + 悬停提示） -->
         <div v-if="!loading && canvasId" class="canvas-dock">
@@ -1266,6 +1365,78 @@ function getNodeColor(type: string | undefined): string {
 .memory-canvas--tool-note .vue-flow__pane,
 .memory-canvas--tool-image .vue-flow__pane {
   cursor: crosshair;
+}
+
+/* 节点搜索面板（Ctrl+F） */
+.canvas-search {
+  position: absolute;
+  top: 64px;
+  right: var(--space-4);
+  z-index: 13;
+  width: 300px;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 12px;
+  background: rgb(13 18 30 / 85%);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  overflow-y: auto;
+}
+
+.canvas-search__input {
+  padding: 7px 10px;
+  color: var(--color-text);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 5%);
+  font-size: 12px;
+  outline: none;
+}
+
+.canvas-search__input:focus {
+  border-color: var(--color-accent);
+}
+
+.canvas-search__empty {
+  padding: var(--space-2);
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  text-align: center;
+}
+
+.canvas-search__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  color: var(--color-text-secondary, var(--color-text));
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvas-search__item:hover {
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+}
+
+.canvas-search__type {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.canvas-search__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── 底部工具 dock（tldraw 式，玻璃拟态） ── */

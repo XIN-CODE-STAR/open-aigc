@@ -29,6 +29,8 @@ const props = defineProps<{
     size?: { width: number; height?: number };
     /** 右键菜单统一由面板打开：上报屏幕坐标即可。 */
     onContextMenu?: (clientX: number, clientY: number) => void;
+    /** 双击缩略图放大预览（图片节点）。 */
+    onPreview?: () => void;
     /** 面板菜单触发「编辑」时的信号（递增计数）。 */
     editSignal?: number;
     onDelete?: () => void;
@@ -259,7 +261,12 @@ watch(
     </div>
 
     <!-- Thumbnail (for image/upload nodes with dataUrl) -->
-    <div v-if="showThumbnail" class="canvas-node__thumb">
+    <div
+      v-if="showThumbnail"
+      class="canvas-node__thumb"
+      title="双击放大预览"
+      @dblclick.stop="data.onPreview?.()"
+    >
       <img
         :src="displaySrc ?? thumbnailUrl!"
         alt=""
@@ -448,6 +455,9 @@ watch(
   overflow: hidden;
   aspect-ratio: 16/10;
   background: rgba(0, 0, 0, 0.2);
+}
+.canvas-node__thumb {
+  cursor: zoom-in;
 }
 .canvas-node__thumb img {
   width: 100%;
