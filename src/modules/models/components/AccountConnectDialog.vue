@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from "vue";
 
 import { invoke } from "@tauri-apps/api/core";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import type { ResourceAccountRecord } from "../../../bridge/resourceAccounts";
 import ModalDialog from "../../../shared/ui/ModalDialog.vue";
@@ -92,6 +93,41 @@ function openLoginPage(): void {
   void invoke("open_file_with_system_viewer", { path: preset.value.loginUrl }).catch((err) => {
     console.error("[account-dialog] 打开登录页失败:", err);
   });
+}
+
+/**
+ * 打开即梦账号池管理（内嵌 Webview 窗口，承载 jimeng-free-api 的
+ * 账号池管理页）：多账号 Cookie 添加/启停/轮询/失败冷却与状态刷新
+ * 都在这个页面完成，无需单独开浏览器。代理未运行时回退系统浏览器。
+ */
+async function openPoolManager(): Promise<void> {
+  const poolUrl = "http://127.0.0.1:5100/account-pool/";
+  try {
+    const probe = await fetch("http://127.0.0.1:5100/ping", {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!probe.ok) throw new Error(`HTTP ${probe.status}`);
+  } catch {
+    // 代理未运行：回退到系统浏览器（至少能看到错误页与启动指引）
+    await invoke("open_file_with_system_viewer", { path: poolUrl }).catch(() => undefined);
+    return;
+  }
+  try {
+    const win = new WebviewWindow("jimeng-pool-manager", {
+      url: poolUrl,
+      title: "即梦账号池管理",
+      width: 1100,
+      height: 820,
+      center: true,
+    });
+    win.once("tauri://error", (event) => {
+      console.error("[account-dialog] 账号池窗口创建失败:", event);
+      void invoke("open_file_with_system_viewer", { path: poolUrl }).catch(() => undefined);
+    });
+  } catch (err) {
+    console.error("[account-dialog] 账号池窗口异常:", err);
+    await invoke("open_file_with_system_viewer", { path: poolUrl }).catch(() => undefined);
+  }
 }
 
 // 编辑模式下预填表单
@@ -198,7 +234,13 @@ function handleClose(): void {
           未识别到 sessionid，请检查粘贴内容
         </p>
         <p class="field__help">{{ preset.helpText }}</p>
-        <button class="login-link" type="button" @click="openLoginPage">打开即梦登录页 ↗</button>
+        <div class="quick-links">
+          <button class="login-link" type="button" @click="openLoginPage">打开即梦登录页 ↗</button>
+          <span class="quick-links__sep">·</span>
+          <button class="login-link" type="button" @click="openPoolManager">
+            账号池管理（多账号轮询）↗
+          </button>
+        </div>
       </div>
 
       <div class="security-note">
@@ -296,6 +338,16 @@ function handleClose(): void {
 .field__detected--warn {
   color: var(--color-text-tertiary);
   font-family: inherit;
+}
+
+.quick-links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.quick-links__sep {
+  color: var(--color-text-tertiary);
 }
 
 .login-link {
