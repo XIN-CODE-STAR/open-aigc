@@ -244,11 +244,11 @@ impl AgentToolExecutor for BuiltinToolExecutor {
                     "properties": {
                         "providerName": {
                             "type": "string",
-                            "description": "视频生成服务提供商名称"
+                            "description": "视频生成服务提供商名称（可选，不填则自动选择可用的视频生成 Provider，无需先查询凭据）"
                         },
                         "modelName": {
                             "type": "string",
-                            "description": "模型标识"
+                            "description": "模型标识（可选，不填则使用默认视频模型；不要填自己的对话模型名）"
                         },
                         "prompt": {
                             "type": "string",
@@ -259,7 +259,7 @@ impl AgentToolExecutor for BuiltinToolExecutor {
                             "description": "视频时长（秒，可选）。当前供应商单镜头支持 5 或 10 秒，默认 5。从用户消息中的时长要求解析（如\"5秒\"）。"
                         }
                     },
-                    "required": ["providerName", "modelName", "prompt"]
+                    "required": ["prompt"]
                 }),
             ),
             ToolDefinition::function(
