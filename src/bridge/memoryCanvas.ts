@@ -183,6 +183,12 @@ export async function deleteEdge(id: string): Promise<void> {
   });
 }
 
+export async function updateEdgeLabel(id: string, label: string): Promise<void> {
+  await invokeNative("memory_edge_v1_update_label", voidResponse, {
+    request: { id, label },
+  });
+}
+
 export async function listEdges(canvasId: string): Promise<MemoryEdge[]> {
   return invokeNative("memory_edge_v1_list", edgeListSchema, {
     request: { canvas_id: canvasId },

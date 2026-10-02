@@ -27,6 +27,45 @@ impl SqliteMemoryCanvasRepository {
             connection: Mutex::new(connection),
         })
     }
+
+    /// 更新连线标签（画布标注用，具体方法不入 trait：仅画布运行时直连使用）。
+    pub fn update_edge_label(&self, id: &str, label: Option<&str>) -> Result<MemoryEdge, AppError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| AppError::StateUnavailable)?;
+        connection
+            .execute(
+                "UPDATE memory_edges SET label = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+                params![label, id],
+            )
+            .map_err(|e| PersistenceError::new("update_edge_label", e))?;
+        connection
+            .query_row(
+                "SELECT id, canvas_id, source_node_id, target_node_id, edge_type, label, created_at FROM memory_edges WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(MemoryEdge {
+                        id: row.get(0)?,
+                        canvas_id: row.get(1)?,
+                        source_node_id: row.get(2)?,
+                        target_node_id: row.get(3)?,
+                        edge_type: row.get(4)?,
+                        label: row.get(5)?,
+                        created_at: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|e| PersistenceError::new("update_edge_label", e))?
+            .ok_or_else(|| {
+                PersistenceError::new(
+                    "update_edge_label",
+                    std::io::Error::new(std::io::ErrorKind::NotFound, "edge not found"),
+                )
+                .into()
+            })
+    }
 }
 
 impl Reloadable for SqliteMemoryCanvasRepository {

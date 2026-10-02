@@ -88,9 +88,9 @@ use ipc::manga::{
 use ipc::memory::{memory_v1_search, memory_v1_status};
 use ipc::memory_canvas::{
     memory_canvas_v1_create, memory_canvas_v1_delete, memory_canvas_v1_get, memory_canvas_v1_list,
-    memory_edge_v1_add, memory_edge_v1_delete, memory_edge_v1_list, memory_node_v1_add,
-    memory_node_v1_delete, memory_node_v1_list, memory_node_v1_update, memory_viewport_v1_get,
-    memory_viewport_v1_save,
+    memory_edge_v1_add, memory_edge_v1_delete, memory_edge_v1_list, memory_edge_v1_update_label,
+    memory_node_v1_add, memory_node_v1_delete, memory_node_v1_list, memory_node_v1_update,
+    memory_viewport_v1_get, memory_viewport_v1_save,
 };
 use ipc::model_router::{
     model_router_v1_list_models, model_router_v1_record_outcome, model_router_v1_route,
@@ -946,6 +946,7 @@ pub fn run() {
             memory_node_v1_list,
             memory_edge_v1_add,
             memory_edge_v1_delete,
+            memory_edge_v1_update_label,
             memory_edge_v1_list,
             memory_viewport_v1_save,
             // Plugins（技能 + MCP）

@@ -39,6 +39,7 @@ import {
   Download,
   Grid3x3,
   AlertCircle,
+  Camera,
   EyeOff,
   Map,
 } from "@lucide/vue";
@@ -92,6 +93,7 @@ const {
   deleteSelected,
   connectNodes,
   reconnectEdge,
+  updateEdgeLabel,
   refreshNodes,
   updateNoteText,
   cycleNoteColor,
@@ -161,8 +163,36 @@ function jumpToNode(node: MemoryNode): void {
 
 const edgeMenu = ref<{ id: string; x: number; y: number } | null>(null);
 const edgeMenuItems = computed<CanvasMenuItem[]>(() => [
+  { key: "label", label: "编辑标签" },
   { key: "delete", label: "删除连线", danger: true },
 ]);
+const edgeLabelEditor = ref<{ id: string; x: number; y: number; value: string } | null>(null);
+const edgeLabelInputRef = ref<HTMLInputElement | null>(null);
+
+function onEdgeMenuSelect(action: string): void {
+  const menu = edgeMenu.value;
+  if (!menu) return;
+  if (action === "label") {
+    const current = edges.value.find((e) => e.id === menu.id)?.label ?? "";
+    edgeLabelEditor.value = {
+      id: menu.id,
+      x: menu.x,
+      y: menu.y,
+      value: current,
+    };
+    void nextTick(() => edgeLabelInputRef.value?.focus());
+  } else if (action === "delete") {
+    void removeEdge(menu.id).then(() => toast.info("已删除连线，Ctrl+Z 可撤销。", 2500));
+  }
+}
+
+async function saveEdgeLabel(): Promise<void> {
+  const editor = edgeLabelEditor.value;
+  if (!editor) return;
+  edgeLabelEditor.value = null;
+  await updateEdgeLabel(editor.id, editor.value);
+  toast.success("连线标签已更新。", 2000);
+}
 
 function onEdgeContextMenu(event: EdgeMouseEvent): void {
   // 触摸事件没有 clientX/Y，忽略（右键菜单仅鼠标触发）
@@ -171,14 +201,6 @@ function onEdgeContextMenu(event: EdgeMouseEvent): void {
   canvasMenu.value = null;
   nodeMenu.value = null;
   edgeMenu.value = { id: event.edge.id, x: event.event.clientX, y: event.event.clientY };
-}
-
-function onEdgeMenuSelect(action: string): void {
-  const menu = edgeMenu.value;
-  if (!menu) return;
-  if (action === "delete") {
-    void removeEdge(menu.id).then(() => toast.info("已删除连线，Ctrl+Z 可撤销。", 2500));
-  }
 }
 
 // ── 新节点反馈：自动居中 + 出现高亮（便签交互打磨） ───
@@ -334,9 +356,12 @@ function onCanvasKeydown(event: KeyboardEvent): void {
   if (key === "escape") {
     if (searchOpen.value) {
       searchOpen.value = false;
-    } else if (nodeMenu.value || canvasMenu.value) {
+    } else if (edgeLabelEditor.value) {
+      edgeLabelEditor.value = null;
+    } else if (nodeMenu.value || canvasMenu.value || edgeMenu.value) {
       nodeMenu.value = null;
       canvasMenu.value = null;
+      edgeMenu.value = null;
     } else if (helpOpen.value) {
       helpOpen.value = false;
     } else if (lightboxUrl.value) {
@@ -640,6 +665,34 @@ function downloadNodeImage(id: string): void {
   anchor.href = url;
   anchor.download = `${node.summary || "canvas-image"}.png`;
   anchor.click();
+}
+
+/** 导出当前画布视图为 PNG 图片（ADR：画布导出为图片）。 */
+async function exportCanvasPng(): Promise<void> {
+  const viewport = document.querySelector(
+    ".memory-canvas .vue-flow__viewport",
+  ) as HTMLElement | null;
+  if (!viewport) {
+    toast.error("画布尚未渲染，无法导出。");
+    return;
+  }
+  try {
+    fitCanvas();
+    await new Promise((r) => setTimeout(r, 320));
+    const { toPng } = await import("html-to-image");
+    const dataUrl = await toPng(viewport, {
+      backgroundColor: "#0d1220",
+      pixelRatio: 2,
+    });
+    const anchor = document.createElement("a");
+    anchor.href = dataUrl;
+    anchor.download = `memory-canvas-${canvasId.value ?? "export"}.png`;
+    anchor.click();
+    toast.success("画布已导出为 PNG。");
+  } catch (e) {
+    console.warn("[MemoryCanvas] png export failed:", e);
+    toast.error("PNG 导出失败，请重试。");
+  }
 }
 
 /** 导出当前画布节点/边为 JSON 文件（含视口，便于离线备份）。 */
@@ -955,6 +1008,31 @@ defineExpose({
           @close="edgeMenu = null"
         />
 
+        <!-- 连线标签编辑器 -->
+        <div
+          v-if="edgeLabelEditor"
+          class="edge-label-editor"
+          :style="{ left: `${edgeLabelEditor.x}px`, top: `${edgeLabelEditor.y}px` }"
+          @keydown.esc.prevent="edgeLabelEditor = null"
+          @keydown.enter.prevent="saveEdgeLabel"
+        >
+          <input
+            ref="edgeLabelInputRef"
+            v-model="edgeLabelEditor.value"
+            class="edge-label-editor__input"
+            type="text"
+            placeholder="连线标签（留空清除）"
+          />
+          <div class="edge-label-editor__actions">
+            <button class="edge-label-editor__btn" type="button" @click="saveEdgeLabel">
+              保存
+            </button>
+            <button class="edge-label-editor__btn" type="button" @click="edgeLabelEditor = null">
+              取消
+            </button>
+          </div>
+        </div>
+
         <!-- 快捷键帮助 -->
         <teleport to="body">
           <div v-if="helpOpen" class="canvas-help-backdrop" @click="helpOpen = false">
@@ -1204,6 +1282,14 @@ defineExpose({
           <button
             class="canvas-dock__btn"
             type="button"
+            title="导出画布为 PNG 图片"
+            @click="exportCanvasPng"
+          >
+            <Camera :size="16" />
+          </button>
+          <button
+            class="canvas-dock__btn"
+            type="button"
             title="快捷键说明"
             @click="helpOpen = true"
           >
@@ -1437,6 +1523,58 @@ function getNodeColor(type: string | undefined): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 连线标签编辑器 */
+.edge-label-editor {
+  position: fixed;
+  z-index: 102;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: rgb(13 18 30 / 92%);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 45%);
+}
+
+.edge-label-editor__input {
+  width: 220px;
+  padding: 6px 9px;
+  color: var(--color-text);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 5%);
+  font-size: 12px;
+  outline: none;
+}
+
+.edge-label-editor__input:focus {
+  border-color: var(--color-accent);
+}
+
+.edge-label-editor__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.edge-label-editor__btn {
+  height: 26px;
+  padding: 0 var(--space-3);
+  color: var(--color-text-secondary, var(--color-text));
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface-subtle);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.edge-label-editor__btn:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 10%);
 }
 
 /* ── 底部工具 dock（tldraw 式，玻璃拟态） ── */

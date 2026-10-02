@@ -25,6 +25,7 @@
     "allow-mcp-v1-toggle",
     "allow-mcp-v1-scan-local",
     "allow-mcp-v1-probe",
+    "allow-memory-edge-v1-update-label",
     "default"
   ]
 }

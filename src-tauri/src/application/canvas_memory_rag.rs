@@ -1119,6 +1119,20 @@ pub fn delete_canvas_by_conversation(workspace_path: &Path, conversation_id: &st
     repo.delete_canvas(&canvas_id).is_ok()
 }
 
+/// 更新连线标签（连线右键菜单编辑用）。label 空串视为清除标签。
+pub fn update_edge_label(workspace_path: &Path, edge_id: &str, label: &str) -> bool {
+    let Some(repo) = open_repo(workspace_path) else {
+        return false;
+    };
+    let trimmed = label.trim();
+    let label = if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    };
+    repo.update_edge_label(edge_id, label).is_ok()
+}
+
 /// 清理孤儿画布（对应对话已被删除的历史遗留，软删）。
 /// 返回清理数量。启动时调用一次。
 pub fn cleanup_orphan_canvases(workspace_path: &Path) -> usize {

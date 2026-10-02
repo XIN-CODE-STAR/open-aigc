@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Manager};
 
 use crate::{
+    application::error::AppError,
     application::memory_canvas_service::MemoryCanvasService,
     ports::memory_canvas_repository::{MemoryCanvas, MemoryEdge, MemoryNode, MemoryViewport},
 };
@@ -212,6 +213,40 @@ pub async fn memory_edge_v1_delete(
 ) -> Result<(), IpcError> {
     let service = app.state::<MemoryCanvasService>();
     service.delete_edge(&request.id)?;
+    Ok(())
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateEdgeLabelRequest {
+    pub id: String,
+    pub label: String,
+}
+
+/// 更新连线标签（连线右键菜单编辑）。走直连仓储：标签更新不入命令历史。
+#[tauri::command]
+pub async fn memory_edge_v1_update_label(
+    app: AppHandle,
+    request: UpdateEdgeLabelRequest,
+) -> Result<(), IpcError> {
+    let workspace_dir = app
+        .path()
+        .app_local_data_dir()
+        .map(|dir| dir.join("workspace"))
+        .map_err(|e| IpcError::from(AppError::new("resolve workspace dir", e)))?;
+    let edge_id = request.id;
+    let label = request.label;
+    tauri::async_runtime::spawn_blocking(move || {
+        let updated = crate::application::canvas_memory_rag::update_edge_label(
+            &workspace_dir,
+            &edge_id,
+            &label,
+        );
+        if !updated {
+            eprintln!("[Canvas] edge label update failed: {edge_id}");
+        }
+    })
+    .await
+    .map_err(|_| IpcError::task_failed())?;
     Ok(())
 }
 

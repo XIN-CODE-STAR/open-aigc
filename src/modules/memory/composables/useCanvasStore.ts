@@ -20,6 +20,7 @@ import {
   addNode as addNodeRpc,
   createCanvas as createCanvasRpc,
   deleteEdge as deleteEdgeRpc,
+  updateEdgeLabel as updateEdgeLabelRpc,
   deleteNode as deleteNodeRpc,
   getViewport as getViewportRpc,
   listCanvases as listCanvasesRpc,
@@ -272,6 +273,14 @@ export function createCanvasStore(ipc: CanvasStoreIpc = bridgeIpc) {
     } finally {
       loading.value = false;
     }
+  }
+
+  /** 更新连线标签：即时 IPC + 本地同步（不入命令历史）。 */
+  async function updateEdgeLabel(edgeId: string, label: string): Promise<void> {
+    await updateEdgeLabelRpc(edgeId, label);
+    edges.value = edges.value.map((e) =>
+      e.id === edgeId ? { ...e, label: label.trim() === "" ? null : label } : e,
+    );
   }
 
   /** Agent 画布工具直接写库后的实时刷新（与前端状态对齐）。 */
@@ -701,6 +710,7 @@ export function createCanvasStore(ipc: CanvasStoreIpc = bridgeIpc) {
     // 边 mutations
     connectNodes,
     reconnectEdge,
+    updateEdgeLabel,
     refreshNodes,
     removeEdge,
     // payload mutations

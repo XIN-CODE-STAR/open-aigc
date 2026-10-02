@@ -100,6 +100,7 @@ fn main() {
             "memory_node_v1_list",
             "memory_edge_v1_add",
             "memory_edge_v1_delete",
+            "memory_edge_v1_update_label",
             "memory_edge_v1_list",
             "memory_viewport_v1_save",
             "memory_viewport_v1_get",
