@@ -41,9 +41,12 @@ const DEFAULT_IMAGE_MODEL: &str = "jimeng-5.0";
 
 /// 默认视频模型（代理期望的格式）。
 /// 对外默认视频模型（effective_model / 配置默认值）。
-const DEFAULT_VIDEO_MODEL: &str = "seedance-2-0";
+/// seedance-2.0 通道（dreamina_seedance_40_pro）当前被即梦风控稳定拒绝
+/// （4013，跨代理版本/会话复现，见 free-api-all issue #30），而 2.5 通道
+/// 风控校验通过（实测到积分校验），故默认切到 2.5。
+const DEFAULT_VIDEO_MODEL: &str = "seedance-2-5";
 /// jimeng-api 代理格式默认视频模型（translate_video_model_for_proxy 回退）。
-const DEFAULT_PROXY_VIDEO_MODEL: &str = "jimeng-video-seedance-2.0";
+const DEFAULT_PROXY_VIDEO_MODEL: &str = "jimeng-video-seedance-2.5";
 
 /// 即梦账号连接器配置。
 #[derive(Debug, Clone)]
@@ -1135,6 +1138,7 @@ fn translate_video_model_for_proxy(model: &str) -> String {
         // 已经是代理格式
         m if m.starts_with("jimeng-video-") => m.to_owned(),
         // 简写形式 → 代理格式
+        "seedance-2-5" | "seedance-2.5" => "jimeng-video-seedance-2.5".into(),
         "seedance-2-0" | "seedance-2.0" => "jimeng-video-seedance-2.0".into(),
         "seedance-2-0-fast" | "seedance-2.0-fast" => "jimeng-video-seedance-2.0-fast".into(),
         "3.5-pro" | "vgfm-3.5-pro" => "jimeng-video-3.5-pro".into(),
@@ -1393,7 +1397,7 @@ mod tests {
         };
         assert_eq!(
             connector.effective_model(&req_video, &credential),
-            "seedance-2-0"
+            "seedance-2-5"
         );
 
         let req_image = UnifiedRequest {
