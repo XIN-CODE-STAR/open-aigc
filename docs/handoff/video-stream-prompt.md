@@ -143,4 +143,9 @@
 
 **Loop 第三轮（10/2）**：账号状态接口确认 membership=unknown（非 VIP）、余额无变化。补充观察：赠送积分**可跨日累积**（80 → 消耗 → 66 的流水证明每日发放叠加未消耗部分），故停止图片消耗 2-3 天可累积 130-200 积分，可能覆盖视频最低档（确切阈值未知，>66）——观察者会在余额越过阈值时自动完成端到端验收。权衡：继续日常图片生成会持续消耗积分、延缓视频可用。
 
+**官方 Seedance API 路径（已验证就绪，10/3）**：
+- 模型管理的凭据对话框已有「火山 Seedance」预设（providerName=seedance，baseUrl=ark.cn-beijing.volces.com/api/v3，单 API Key 表单），SeedanceVideoAdapter 支持 TextToVideo/ImageToVideo，凭据添加后视频工具经 resolve_capability 自动路由到官方 API——完全绕开即梦网页风控与积分体系，按量计费。
+- 用户配置步骤：火山引擎控制台开通方舟服务 → API Key 管理 创建 Key → 应用「模型管理」添加凭据选「火山 Seedance」粘贴 Key → （如未生效重启应用）→ 视频请求自动走官方通道，模型默认 seedance-2-0-250601。
+- kling（AK/SK 双密钥）暂不支持凭据表单（表单为单 Key 字段），如需 kling 官方通道需扩展凭据表单支持 AccessSecret 类型——记为后续项。
+
 **Loop 第四轮（10/2 晚）——4013 正式攻克**：上游发布 **v1.2.8「上游风控浏览器传输」**（176e6f7，issue #30 的官方应对）：即梦对 Seedance 2.0/2.0-Fast 链路启用 starling 风控中间件（要求浏览器侧 `msToken`/`a_bogus` 签名，纯服务端请求必 4013 且不耗积分——与我们的判别完全一致），v1.2.8 新增浏览器传输层在被拦截时自动改用真实浏览器完成签名重试（默认 auto 模式，本机 Edge 即可）。已部署 v1.2.8 便携版至 `services/jimeng-free-api-all-v128/`（sha256 校验通过，账号池 data 与池密钥已迁移，旧 v1.2.7 目录待清理），实测 **4013 消失**，当前错误变为 `1310 使用高峰期暂时无法提交`（瞬态容量限制，与风控无关）——晚高峰过后或换时段即可提交。部署注意：浏览器传输需本机 Chrome/Edge（默认 auto 回退 Edge），`JIMENG_BROWSER_TRANSPORT` 可调 off/auto/always；官方明确浏览器传输不解决积分不足（1006/-2009 仍需充值）。自启 vbs 已指向 v1.2.8 目录，gitignore 模式更新为 `services/jimeng-free-api-all*/`。
