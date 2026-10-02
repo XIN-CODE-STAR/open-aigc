@@ -27,7 +27,14 @@ export default defineConfig(async () => ({
     watch: {
       // 3. ignore native build output and local QA artifacts
       // .mimosa：安全扫描器 hook-state 基线文件被独占锁定，watch 会以 EBUSY 崩溃
-      ignored: ["**/src-tauri/**", "**/work/**", "**/.mimosa/**"],
+      // services/jimeng-free-api-all*：即梦代理运行时（数千个第三方文件），
+      //   纳入 watch 会撑爆 FSWatcher 导致前端服务崩溃（10/2 复盘）
+      ignored: [
+        "**/src-tauri/**",
+        "**/work/**",
+        "**/.mimosa/**",
+        "**/services/jimeng-free-api-all*/**",
+      ],
     },
   },
   test: {
