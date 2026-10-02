@@ -210,6 +210,27 @@ impl PlanningEngine {
         // 非分镜的图片请求直接建 1 步图片任务：Director 倾向把单图请求展开成
         // 多镜头多步计划（22:22 复盘：单图被规划成 5 步，同一个提交失败在
         // 每一步各刷一条回复）。确定性单步同时消除过度规划与重复回复。
+        // 画布便签快速路径：优先于图片判定（“在画布上创建便签”不是画图请求）。
+        if wants_canvas_note(raw_user_content) && !has_image {
+            let steps = build_single_shot_canvas_note_steps(user_content);
+            let draft =
+                PlanDraft::try_new(conversation_id.to_owned(), user_content.to_owned(), steps)?;
+            let record = self.create_plan_from_draft(draft)?;
+            super::agent_service::emit_event(
+                app,
+                conversation_id,
+                AgentEvent::PlanCreated {
+                    conversation_id: conversation_id.to_owned(),
+                    plan: record.clone(),
+                },
+            );
+            eprintln!("[Planner] canvas note fast path: 1 step");
+            return Ok(PlanningOutcome::Planned {
+                plan: record,
+                creative_plan: None,
+            });
+        }
+
         if wants_image(raw_user_content) && !has_image && !is_storyboard_request(raw_user_content) {
             let steps = build_single_shot_image_steps(user_content);
             let draft =
@@ -613,8 +634,35 @@ pub(crate) fn wants_image(message: &str) -> bool {
     if wants_video(message) {
         return false;
     }
-    let lower = message.to_lowercase();
+    // 「画布」是地点词不是图片意图（如“在画布上创建便签”），
+    // 剔除后再匹配，避免“在画布上…”被误判为画图请求。
+    let cleaned = message.replace("画布", "");
+    let lower = cleaned.to_lowercase();
     IMAGE_KEYWORDS.iter().any(|kw| lower.contains(kw))
+}
+
+/// 判断用户消息是否要求在画布上记录文字信息（便签/笔记）。
+/// 优先级高于图片判定：此时应走 canvas_add_note 而非图片生成。
+pub(crate) fn wants_canvas_note(message: &str) -> bool {
+    const NOTE_KEYWORDS: &[&str] = &["便签", "笔记", "记一下", "记录"];
+    const CANVAS_HINTS: &[&str] = &["画布", "记", "写"];
+    let lower = message.to_lowercase();
+    let has_note = NOTE_KEYWORDS.iter().any(|kw| lower.contains(kw));
+    let has_canvas_hint = CANVAS_HINTS.iter().any(|kw| lower.contains(kw));
+    has_note && has_canvas_hint && !wants_video(message)
+}
+
+/// 构造画布便签记录的执行步骤（快速路径）。
+/// 执行阶段由 canvas_add_note 工具落地，描述引导 Agent 用文字便签而非图片。
+pub(crate) fn build_single_shot_canvas_note_steps(prompt: &str) -> Vec<PlanStep> {
+    vec![PlanStep {
+        index: 1,
+        description: format!(
+            "在画布上创建文字便签记录 — {prompt}（用 canvas_add_note，不要生成图片）"
+        ),
+        status: PlanStepStatus::Pending,
+        kind: PlanStepKind::Task,
+    }]
 }
 
 /// 构造单张图片任务的执行步骤（快速路径，纯函数便于测试）。
@@ -645,6 +693,24 @@ pub(crate) fn extract_direct_answer(content: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::domain::agent::PlanStepKind;
+
+    #[test]
+    fn canvas_note_intent_beats_image_keywords() {
+        assert!(wants_canvas_note(
+            "在画布上创建一条便签，记录：项目主线是暗色调科技感"
+        ));
+        assert!(wants_canvas_note("在画布上记一下：客户喜欢蓝色"));
+        assert!(!wants_canvas_note("生成一张赛博朋克城市的图"));
+        assert!(!wants_canvas_note("生成一段5秒的海浪视频"));
+    }
+
+    #[test]
+    fn canvas_note_steps_forbid_image_generation() {
+        let steps = build_single_shot_canvas_note_steps("项目主线是暗色调科技感");
+        assert_eq!(steps.len(), 1);
+        assert!(steps[0].description.contains("canvas_add_note"));
+        assert!(steps[0].description.contains("不要生成图片"));
+    }
 
     #[test]
     fn test_wants_video_detection() {
@@ -698,6 +764,10 @@ mod tests {
     #[test]
     fn test_wants_image_detection() {
         assert!(wants_image("画一张海浪拍打礁石的图"));
+        // 「画布」是地点词，不应触发图片判定
+        assert!(!wants_image(
+            "在画布上创建一条便签，记录：项目主线是暗色调科技感"
+        ));
         assert!(wants_image("生成一张海浪拍打礁石的写实摄影照片"));
         assert!(wants_image("做一张游戏海报"));
         assert!(wants_image("帮我画一张头像"));
