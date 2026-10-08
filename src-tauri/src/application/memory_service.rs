@@ -4,7 +4,7 @@
 //! 通过 EverOS HTTP 客户端提供长期记忆能力。
 //! 对话结束后自动存储，规划阶段自动检索。
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::adapters::everos::{EverosClient, EverosError, EverosProcessManager};
 use crate::application::error::AppError;
@@ -40,7 +40,26 @@ pub struct MemoryServiceImpl {
 struct MemoryServiceInner {
     client: EverosClient,
     process_manager: EverosProcessManager,
-    config: MemoryServiceConfig,
+    /// 运行期可变：设置界面可启用/停用长期记忆并切换根目录。
+    config: Mutex<MemoryServiceConfig>,
+}
+
+/// EverOS 配置与运行状态（供设置界面展示）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EverosStatus {
+    /// 是否已启用（启用后记忆才参与对话）。
+    pub enabled: bool,
+    /// 子进程是否在运行。
+    pub running: bool,
+    /// 健康检查是否通过（服务可用）。
+    pub available: bool,
+    /// 服务端口。
+    pub port: u16,
+    /// 记忆根目录。
+    pub root_path: String,
+    /// 根目录下是否存在 everos.toml（缺失需先运行 scripts/setup-everos.ps1）。
+    pub config_present: bool,
 }
 
 impl MemoryServiceImpl {
@@ -53,9 +72,66 @@ impl MemoryServiceImpl {
             inner: Arc::new(MemoryServiceInner {
                 client,
                 process_manager,
-                config,
+                config: Mutex::new(config),
             }),
         }
+    }
+
+    /// 读取配置快照（锁内克隆，避免持锁跨调用）。
+    fn config_snapshot(&self) -> MemoryServiceConfig {
+        self.inner
+            .config
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// 当前 EverOS 配置与运行状态。
+    pub fn status(&self) -> EverosStatus {
+        let config = self.config_snapshot();
+        let root = std::path::Path::new(&config.root_path);
+        EverosStatus {
+            enabled: config.enabled,
+            running: self.inner.process_manager.is_process_alive(),
+            available: config.enabled && self.inner.client.health().unwrap_or(false),
+            port: config.port,
+            root_path: config.root_path.clone(),
+            config_present: root.join("everos.toml").exists(),
+        }
+    }
+
+    /// 启用 / 停用长期记忆。
+    ///
+    /// 启用：创建记忆根目录（可覆盖路径）→ 置 enabled → 尽力拉起服务
+    /// （缺 everos CLI 或 everos.toml 时记录错误但不回滚启用状态，便于用户先配置再重启）。
+    /// 停用：停止服务并置 enabled = false，**保留数据目录**。
+    pub fn set_enabled(
+        &self,
+        enabled: bool,
+        root_path: Option<String>,
+    ) -> Result<EverosStatus, AppError> {
+        if enabled {
+            let current = self.config_snapshot();
+            let root = root_path
+                .filter(|p| !p.trim().is_empty())
+                .unwrap_or(current.root_path);
+            let path = std::path::PathBuf::from(&root);
+            std::fs::create_dir_all(&path)
+                .map_err(|e| AppError::MemoryServiceError(format!("创建记忆目录失败: {e}")))?;
+            {
+                let mut config = self.inner.config.lock().unwrap_or_else(|e| e.into_inner());
+                config.enabled = true;
+                config.root_path = root;
+            }
+            if let Err(e) = self.inner.process_manager.start() {
+                eprintln!("[Memory] EverOS 服务启动失败（配置仍已启用）: {e}");
+            }
+        } else {
+            let _ = self.inner.process_manager.stop();
+            let mut config = self.inner.config.lock().unwrap_or_else(|e| e.into_inner());
+            config.enabled = false;
+        }
+        Ok(self.status())
     }
 }
 
@@ -66,7 +142,7 @@ impl MemoryServicePort for MemoryServiceImpl {
         conversation_id: &str,
         messages: &[MessageRecord],
     ) -> Result<(), AppError> {
-        if !self.inner.config.enabled {
+        if !self.config_snapshot().enabled {
             return Ok(());
         }
 
@@ -103,7 +179,7 @@ impl MemoryServicePort for MemoryServiceImpl {
 
     /// 事实沉淀：作为 assistant 消息写入会话记忆（EverOS 以消息为记忆载体）。
     fn remember_facts(&self, workspace_id: &str, facts: &[String]) -> Result<(), AppError> {
-        if !self.inner.config.enabled || facts.is_empty() {
+        if !self.config_snapshot().enabled || facts.is_empty() {
             return Ok(());
         }
         let timestamp = time::OffsetDateTime::now_utc().unix_timestamp();
@@ -128,11 +204,11 @@ impl MemoryServicePort for MemoryServiceImpl {
         query: &str,
         limit: usize,
     ) -> Result<Vec<MemoryResult>, AppError> {
-        if !self.inner.config.enabled {
+        if !self.config_snapshot().enabled {
             return Ok(Vec::new());
         }
 
-        let primary = match self.inner.config.search_method.as_str() {
+        let primary = match self.config_snapshot().search_method.as_str() {
             "vector" => crate::adapters::everos::client::SearchMethod::Vector,
             "hybrid" => crate::adapters::everos::client::SearchMethod::Hybrid,
             _ => crate::adapters::everos::client::SearchMethod::Keyword,
@@ -221,14 +297,14 @@ impl MemoryServicePort for MemoryServiceImpl {
     }
 
     fn is_available(&self) -> bool {
-        if !self.inner.config.enabled {
+        if !self.config_snapshot().enabled {
             return false;
         }
         self.inner.client.health().unwrap_or(false)
     }
 
     fn start(&self) -> Result<(), AppError> {
-        if !self.inner.config.enabled {
+        if !self.config_snapshot().enabled {
             return Ok(());
         }
         self.inner

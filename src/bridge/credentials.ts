@@ -78,15 +78,29 @@ const createCredentialRequestSchema = z
       .trim()
       .min(1, "模型名称不能为空。")
       .max(120, "模型名称不能超过 120 个字符。"),
-    apiKey: z
-      .string()
-      .trim()
-      .min(1, "API 密钥不能为空。")
-      .max(500, "API 密钥不能超过 500 个字符。"),
+    // 单一密钥（api_key 类型必填）；AccessSecret 类型改用 accessKey / secretKey
+    apiKey: z.string().trim().max(500, "API 密钥不能超过 500 个字符。").optional(),
+    accessKey: z.string().trim().max(500, "Access Key 不能超过 500 个字符。").optional(),
+    secretKey: z.string().trim().max(500, "Secret Key 不能超过 500 个字符。").optional(),
     // 认证类型（可选，默认 api_key。账号类传 session_cookie / browser_session）
     credentialType: z.string().trim().max(30).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    // AccessSecret（AK/SK）需要两把密钥；其余类型需要单一 API Key
+    if (value.credentialType === "access_secret") {
+      if (!value.accessKey) {
+        ctx.addIssue({ code: "custom", path: ["accessKey"], message: "Access Key 不能为空。" });
+      }
+      if (!value.secretKey) {
+        ctx.addIssue({ code: "custom", path: ["secretKey"], message: "Secret Key 不能为空。" });
+      }
+      return;
+    }
+    if (!value.apiKey) {
+      ctx.addIssue({ code: "custom", path: ["apiKey"], message: "API 密钥不能为空。" });
+    }
+  });
 
 const updateCredentialRequestSchema = z
   .object({
@@ -117,6 +131,9 @@ const updateCredentialRequestSchema = z
       .min(1, "API 密钥不能为空。")
       .max(500, "API 密钥不能超过 500 个字符。")
       .optional(),
+    // AccessSecret 类型：留空保留原密钥，填则按 AK/SK 覆盖
+    accessKey: z.string().trim().max(500, "Access Key 不能超过 500 个字符。").optional(),
+    secretKey: z.string().trim().max(500, "Secret Key 不能超过 500 个字符。").optional(),
   })
   .strict();
 

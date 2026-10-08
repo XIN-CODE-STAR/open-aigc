@@ -99,7 +99,10 @@ async function handleSubmit(payload: {
   displayName: string;
   baseUrl: string;
   modelName: string;
-  apiKey: string;
+  apiKey?: string;
+  accessKey?: string;
+  secretKey?: string;
+  credentialType: "api_key" | "access_secret";
 }): Promise<void> {
   if (editingCredential.value) {
     const result = await edit({
@@ -109,6 +112,8 @@ async function handleSubmit(payload: {
       baseUrl: payload.baseUrl,
       modelName: payload.modelName,
       apiKey: payload.apiKey || undefined,
+      accessKey: payload.accessKey || undefined,
+      secretKey: payload.secretKey || undefined,
     });
     if (result) {
       toast.success("模型已更新。");

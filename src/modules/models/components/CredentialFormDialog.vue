@@ -19,10 +19,16 @@ const emit = defineEmits<{
       displayName: string;
       baseUrl: string;
       modelName: string;
-      apiKey: string;
+      apiKey?: string;
+      accessKey?: string;
+      secretKey?: string;
+      credentialType: CredentialTypeValue;
     },
   ];
 }>();
+
+/** 认证方式：单一 API Key，或 Access Key + Secret Key 双密钥。 */
+type CredentialTypeValue = "api_key" | "access_secret";
 
 interface ProviderPreset {
   label: string;
@@ -30,6 +36,8 @@ interface ProviderPreset {
   providerName: string;
   baseUrl: string;
   defaultModel: string;
+  /** 该预设的认证方式（缺省视为 api_key）。 */
+  credentialType?: CredentialTypeValue;
 }
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -167,6 +175,14 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     defaultModel: "seedance-2-0-250601",
   },
   {
+    label: "可灵 Kling",
+    abbr: "KL",
+    providerName: "kling",
+    baseUrl: "https://api.klingai.com",
+    defaultModel: "kling-v1",
+    credentialType: "access_secret",
+  },
+  {
     label: "ModelScope",
     abbr: "MS",
     providerName: "modelscope",
@@ -181,6 +197,10 @@ interface FormState {
   baseUrl: string;
   modelName: string;
   apiKey: string;
+  accessKey: string;
+  secretKey: string;
+  /** "api_key" | "access_secret"（select 绑定为 string，提交时归一化）。 */
+  credentialType: string;
 }
 
 const form = reactive<FormState>({
@@ -189,6 +209,9 @@ const form = reactive<FormState>({
   baseUrl: "",
   modelName: "",
   apiKey: "",
+  accessKey: "",
+  secretKey: "",
+  credentialType: "api_key",
 });
 
 /** step: "grid" = 预设网格选择, "form" = 填写表单 */
@@ -212,14 +235,18 @@ const title = computed(() => {
   return step.value === "grid" ? "选择供应商" : "配置模型";
 });
 
-const canSubmit = computed(
-  () =>
-    form.providerName &&
-    form.displayName &&
-    form.baseUrl &&
-    form.modelName &&
-    (isEdit.value || form.apiKey),
-);
+const isAccessSecret = computed(() => form.credentialType === "access_secret");
+
+const canSubmit = computed(() => {
+  if (!form.providerName || !form.displayName || !form.baseUrl || !form.modelName) {
+    return false;
+  }
+  // 编辑时密钥可留空以保留原值；新建必须填写对应密钥
+  if (isAccessSecret.value) {
+    return isEdit.value || (form.accessKey.trim() !== "" && form.secretKey.trim() !== "");
+  }
+  return isEdit.value || form.apiKey.trim() !== "";
+});
 
 function selectPreset(preset: ProviderPreset): void {
   selectedPreset.value = preset;
@@ -227,7 +254,10 @@ function selectPreset(preset: ProviderPreset): void {
   form.displayName = preset.label;
   form.baseUrl = preset.baseUrl;
   form.modelName = preset.defaultModel;
+  form.credentialType = preset.credentialType ?? "api_key";
   form.apiKey = "";
+  form.accessKey = "";
+  form.secretKey = "";
   step.value = "form";
 }
 
@@ -238,6 +268,9 @@ function openCustom(): void {
   form.baseUrl = "";
   form.modelName = "";
   form.apiKey = "";
+  form.accessKey = "";
+  form.secretKey = "";
+  form.credentialType = "api_key";
   step.value = "form";
 }
 
@@ -246,7 +279,32 @@ function backToGrid(): void {
 }
 
 function handleSubmit(): void {
-  emit("submit", { ...form });
+  const payload: {
+    providerName: string;
+    displayName: string;
+    baseUrl: string;
+    modelName: string;
+    apiKey?: string;
+    accessKey?: string;
+    secretKey?: string;
+    credentialType: CredentialTypeValue;
+  } = {
+    providerName: form.providerName,
+    displayName: form.displayName,
+    baseUrl: form.baseUrl,
+    modelName: form.modelName,
+    credentialType: isAccessSecret.value ? "access_secret" : "api_key",
+  };
+  if (isAccessSecret.value) {
+    // 编辑时两把密钥均留空则不携带密钥字段（保留 keychain 原值）
+    if (form.accessKey || form.secretKey) {
+      payload.accessKey = form.accessKey;
+      payload.secretKey = form.secretKey;
+    }
+  } else if (form.apiKey) {
+    payload.apiKey = form.apiKey;
+  }
+  emit("submit", payload);
 }
 
 watch(
@@ -260,7 +318,11 @@ watch(
       form.displayName = props.editing.displayName;
       form.baseUrl = props.editing.baseUrl;
       form.modelName = props.editing.modelName;
+      form.credentialType =
+        props.editing.credentialType === "access_secret" ? "access_secret" : "api_key";
       form.apiKey = "";
+      form.accessKey = "";
+      form.secretKey = "";
     } else {
       step.value = "grid";
       selectedPreset.value = null;
@@ -270,6 +332,9 @@ watch(
       form.baseUrl = "";
       form.modelName = "";
       form.apiKey = "";
+      form.accessKey = "";
+      form.secretKey = "";
+      form.credentialType = "api_key";
     }
   },
 );
@@ -377,6 +442,44 @@ watch(
       </div>
 
       <div class="form-field">
+        <label class="form-label" for="credential-type">认证方式 *</label>
+        <select id="credential-type" v-model="form.credentialType" class="form-input">
+          <option value="api_key">API Key（单一密钥）</option>
+          <option value="access_secret">Access Key + Secret Key（AK/SK 签名）</option>
+        </select>
+      </div>
+
+      <template v-if="isAccessSecret">
+        <div class="form-field">
+          <label class="form-label" for="access-key">
+            Access Key {{ isEdit ? "（留空保留原有）" : "*" }}
+          </label>
+          <input
+            id="access-key"
+            v-model.trim="form.accessKey"
+            class="form-input form-input--mono"
+            type="password"
+            :placeholder="isEdit ? '留空则不修改' : 'AK...'"
+            maxlength="500"
+          />
+        </div>
+        <div class="form-field">
+          <label class="form-label" for="secret-key">
+            Secret Key {{ isEdit ? "（留空保留原有）" : "*" }}
+          </label>
+          <input
+            id="secret-key"
+            v-model.trim="form.secretKey"
+            class="form-input form-input--mono"
+            type="password"
+            :placeholder="isEdit ? '留空则不修改' : 'SK...'"
+            maxlength="500"
+          />
+          <span class="form-hint">AK/SK 一并存入系统密钥链，不会明文写入数据库</span>
+        </div>
+      </template>
+
+      <div v-else class="form-field">
         <label class="form-label" for="api-key">
           API 密钥 {{ isEdit ? "（留空保留原有）" : "*" }}
         </label>

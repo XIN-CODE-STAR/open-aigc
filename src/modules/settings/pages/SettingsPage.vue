@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import type { Component } from "vue";
 
 import { version as appVersion } from "../../../../package.json";
@@ -8,11 +8,13 @@ import {
   Bell,
   Bot,
   Cpu,
+  Database,
   FolderOpen,
   Keyboard,
   List,
   Monitor,
   Moon,
+  RefreshCw,
   Rows3,
   Save,
   Sun,
@@ -28,6 +30,13 @@ import {
   usePreferencesStore,
 } from "../../../app/stores/preferences";
 import { useProjectDirectory } from "../../../app/stores/projectDirectory";
+import {
+  memoryV1SetEverosEnabled,
+  memoryV1Status,
+  type MemoryStatus,
+} from "../../../bridge/memory";
+import BaseSwitch from "../../../shared/ui/BaseSwitch.vue";
+import { useToast } from "../../../shared/ui/useToast";
 
 interface SegmentedOption<T extends string> {
   icon: Component;
@@ -37,9 +46,45 @@ interface SegmentedOption<T extends string> {
 
 const preferences = usePreferencesStore();
 const projectDir = useProjectDirectory();
+const toast = useToast();
+
+// ── 长期记忆（EverOS）──
+const everosStatus = ref<MemoryStatus | null>(null);
+const everosBusy = ref(false);
+
+const everosStatusText = computed(() => {
+  const status = everosStatus.value;
+  if (!status) return "未连接";
+  if (status.available) return "运行中，可用";
+  if (status.enabled && status.running) return "已启动，等待就绪";
+  if (status.enabled) return "已启用，服务未运行";
+  return "未启用";
+});
+
+async function refreshEveros(): Promise<void> {
+  try {
+    everosStatus.value = await memoryV1Status();
+  } catch {
+    everosStatus.value = null;
+  }
+}
+
+async function toggleEveros(next: boolean): Promise<void> {
+  everosBusy.value = true;
+  try {
+    everosStatus.value = await memoryV1SetEverosEnabled(next);
+    toast.success(next ? "长期记忆已启用。" : "长期记忆已停用。");
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : "长期记忆设置失败。");
+    await refreshEveros();
+  } finally {
+    everosBusy.value = false;
+  }
+}
 
 onMounted(() => {
   projectDir.restore();
+  void refreshEveros();
 });
 
 const themeOptions: SegmentedOption<ThemePreference>[] = [
@@ -230,6 +275,55 @@ function onMaxTokensInput(event: Event): void {
       </label>
     </section>
 
+    <!-- ═══ 记忆 ═══ -->
+    <div class="settings-divider">
+      <Database :size="16" :stroke-width="1.8" />
+      <span>记忆</span>
+    </div>
+
+    <section class="settings-section settings-section--everos" aria-labelledby="everos-title">
+      <div class="setting-copy">
+        <h2 id="everos-title">
+          <Database :size="15" :stroke-width="1.8" class="setting-icon" />
+          长期记忆（EverOS）
+        </h2>
+        <p>启用后对话与画布结论会沉淀为长期记忆，并在后续创作时自动检索。</p>
+        <p v-if="everosStatus" class="setting-status">
+          状态：{{ everosStatusText }} · 端口 {{ everosStatus.port }}
+        </p>
+        <p
+          v-if="everosStatus && !everosStatus.configPresent"
+          class="setting-status setting-status--warn"
+        >
+          未检测到 everos.toml，请先运行 scripts/setup-everos.ps1 初始化。
+        </p>
+        <p
+          v-if="everosStatus"
+          class="setting-status setting-status--path"
+          :title="everosStatus.rootPath"
+        >
+          目录：{{ everosStatus.rootPath }}
+        </p>
+      </div>
+      <div class="setting-actions">
+        <BaseSwitch
+          :model-value="everosStatus?.enabled ?? false"
+          :disabled="everosBusy || !everosStatus"
+          title="启用长期记忆"
+          @update:model-value="toggleEveros"
+        />
+        <button
+          class="btn-icon"
+          type="button"
+          title="刷新状态"
+          :disabled="everosBusy"
+          @click="refreshEveros"
+        >
+          <RefreshCw :size="15" :stroke-width="1.8" />
+        </button>
+      </div>
+    </section>
+
     <!-- ═══ 通知与声音 ═══ -->
     <div class="settings-divider">
       <Bell :size="16" :stroke-width="1.8" />
@@ -403,6 +497,59 @@ function onMaxTokensInput(event: Event): void {
   color: var(--color-text-secondary);
   font-size: 12px;
   line-height: 18px;
+}
+
+/* ─── 长期记忆（EverOS）── */
+.settings-section--everos {
+  align-items: start;
+}
+
+.setting-status {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.setting-status--warn {
+  color: var(--color-warning);
+}
+
+.setting-status--path {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: end;
+}
+
+.btn-icon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.btn-icon:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ─── 分段控件 ─── */

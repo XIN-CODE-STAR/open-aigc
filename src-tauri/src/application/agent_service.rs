@@ -310,6 +310,8 @@ pub struct AgentService {
     output_directory: std::sync::Mutex<Option<PathBuf>>,
     /// Agent 运行时：拆分后的核心编排器。设置后 send_message 委托给它。
     agent_runtime: std::sync::Mutex<Option<super::agent_runtime::AgentRuntime>>,
+    /// 工具执行沙箱策略。未接入时为 None（放行），由 with_sandbox 注入。
+    sandbox: Option<Arc<crate::domain::sandbox::SandboxPolicy>>,
 }
 
 impl AgentService {
@@ -339,7 +341,18 @@ impl AgentService {
             response_cache: ResponseCache::new(),
             output_directory: std::sync::Mutex::new(None),
             agent_runtime: std::sync::Mutex::new(None),
+            sandbox: None,
         }
+    }
+
+    /// 注入工具执行沙箱策略：约束工具可访问的路径与命令。
+    /// 未注入时工具执行不做路径校验（兼容旧调用方与测试）。
+    pub fn with_sandbox(
+        mut self,
+        sandbox: Arc<crate::domain::sandbox::SandboxPolicy>,
+    ) -> Self {
+        self.sandbox = Some(sandbox);
+        self
     }
 
     pub fn with_generation_engine(
@@ -1425,7 +1438,7 @@ impl AgentService {
             workspace_path,
             output_directory,
             conversation_id: conversation_id.to_owned(),
-            sandbox: None,
+            sandbox: self.sandbox.clone(),
             latest_user_image: None,
             current_user_message: None,
         };

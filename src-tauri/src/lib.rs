@@ -85,7 +85,7 @@ use ipc::manga::{
     manga_v1_create_shot, manga_v1_delete_project, manga_v1_get_project, manga_v1_list_characters,
     manga_v1_list_projects, manga_v1_list_scenes, manga_v1_list_shots, manga_v1_upsert_story_bible,
 };
-use ipc::memory::{memory_v1_search, memory_v1_status};
+use ipc::memory::{memory_v1_everos_set_enabled, memory_v1_search, memory_v1_status};
 use ipc::memory_canvas::{
     memory_canvas_v1_create, memory_canvas_v1_delete, memory_canvas_v1_get, memory_canvas_v1_list,
     memory_edge_v1_add, memory_edge_v1_delete, memory_edge_v1_list, memory_edge_v1_update_label,
@@ -125,6 +125,76 @@ use ipc::workspace::{
     workspace_v1_rename,
 };
 use tauri::Manager;
+
+/// 从已启用的「对话类」凭据构造默认 LLM 文本运行时，供 Analyzer / Generic 子 Agent 使用。
+///
+/// 子 Agent 最小闭环的一部分：`SubAgentRuntime` 需要一个能处理 Analysis/Generic 的
+/// TaskRuntime（生成运行时只处理生成类任务）。找不到合适的对话凭据时返回 None，
+/// 子 Agent 退化为仅支持生成类任务。
+fn build_default_text_runtime(
+    database_path: &std::path::Path,
+) -> Option<std::sync::Arc<dyn crate::ports::task_runtime::TaskRuntime>> {
+    // 只挑看起来是对话模型的供应商，避免误用图片/视频供应商的 base_url 做 chat。
+    const CHAT_PROVIDER_HINTS: &[&str] = &[
+        "deepseek",
+        "openai",
+        "anthropic",
+        "claude",
+        "gemini",
+        "moonshot",
+        "kimi",
+        "zhipu",
+        "glm",
+        "qianfan",
+        "dashscope",
+        "qwen",
+        "minimax",
+        "stepfun",
+        "doubao",
+        "siliconflow",
+        "openrouter",
+        "xiaomi",
+        "mimo",
+        "nvidia",
+        "groq",
+        "mistral",
+        "cohere",
+        "modelscope",
+        "grok",
+    ];
+
+    let repository =
+        crate::adapters::sqlite::credential_repository::SqliteCredentialRepository::open(
+            database_path,
+        )
+        .ok()?;
+    let service = crate::application::credential_service::CredentialService::new(
+        repository,
+        database_path.to_path_buf(),
+    );
+    let credentials = service.list().ok()?;
+    let credential = credentials.iter().find(|c| {
+        c.enabled
+            && CHAT_PROVIDER_HINTS
+                .iter()
+                .any(|hint| c.provider_name.to_lowercase().contains(hint))
+    })?;
+    let api_key = service.get_secret(&credential.credential_key).ok()?;
+    if api_key.trim().is_empty() {
+        return None;
+    }
+
+    let adapter = crate::adapters::providers::grok_chat::GrokChatAdapter::new(
+        credential.base_url.clone(),
+        api_key,
+    );
+    Some(std::sync::Arc::new(
+        crate::application::llm_task_runtime::LlmTaskRuntime::new(
+            Box::new(adapter),
+            credential.model_name.clone(),
+        ),
+    ))
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -282,6 +352,20 @@ pub fn run() {
                 );
             let sub_agent_task_runtime = std::sync::Arc::clone(&task_runtime);
             app.manage(task_runtime);
+
+            // 子 Agent 最小闭环：存在对话类凭据时，为 Analyzer/Generic 叠加 LLM 文本运行时
+            // （生成运行时只处理生成类任务，此前这两类子 Agent 提交必然 UnknownKind）。
+            let sub_agent_task_runtime: std::sync::Arc<
+                dyn crate::ports::task_runtime::TaskRuntime,
+            > = match build_default_text_runtime(&database_path) {
+                Some(text_runtime) => std::sync::Arc::new(
+                    crate::application::llm_task_runtime::CompositeTaskRuntime::new(
+                        std::sync::Arc::clone(&sub_agent_task_runtime),
+                        text_runtime,
+                    ),
+                ),
+                None => sub_agent_task_runtime,
+            };
 
             std::fs::create_dir_all(&download_dir).ok();
             let pipeline_review_repo = SqliteReviewRepository::open(&database_path)?;
@@ -685,6 +769,7 @@ pub fn run() {
                 .with_creative_director(creative_director_arc)
                 .with_creative_runtime(creative_runtime_arc)
                 .with_agent_runtime(agent_runtime)
+                .with_sandbox(std::sync::Arc::clone(&sandbox_policy))
             };
 
             if !app.manage(agent_service) {
@@ -889,6 +974,7 @@ pub fn run() {
             agent_v1_debug_log,
             memory_v1_status,
             memory_v1_search,
+            memory_v1_everos_set_enabled,
             manga_v1_create_project,
             manga_v1_list_projects,
             manga_v1_get_project,

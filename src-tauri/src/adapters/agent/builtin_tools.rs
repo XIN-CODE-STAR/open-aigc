@@ -569,6 +569,11 @@ impl AgentToolExecutor for BuiltinToolExecutor {
         tool_name: &str,
         arguments: &str,
     ) -> Result<ToolExecutionResult, AgentToolError> {
+        // 沙箱前置校验：工作区与输出目录必须落在策略允许范围内（未接入策略时放行）。
+        ctx.ensure_path_allowed(&ctx.workspace_path)?;
+        if let Some(output_dir) = &ctx.output_directory {
+            ctx.ensure_path_allowed(output_dir)?;
+        }
         match tool_name {
             TOOL_IMAGE_GENERATION | TOOL_VIDEO_GENERATION => {
                 execute_generation(self, ctx, tool_name, arguments)

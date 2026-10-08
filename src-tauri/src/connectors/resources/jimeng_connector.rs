@@ -1141,6 +1141,7 @@ fn translate_video_model_for_proxy(model: &str) -> String {
         "seedance-2-5" | "seedance-2.5" => "jimeng-video-seedance-2.5".into(),
         "seedance-2-0" | "seedance-2.0" => "jimeng-video-seedance-2.0".into(),
         "seedance-2-0-fast" | "seedance-2.0-fast" => "jimeng-video-seedance-2.0-fast".into(),
+        "seedance-2-0-mini" | "seedance-2.0-mini" => "jimeng-video-seedance-2.0-mini".into(),
         "3.5-pro" | "vgfm-3.5-pro" => "jimeng-video-3.5-pro".into(),
         "3.0-pro" | "vgfm-3.0-pro" => "jimeng-video-3.0-pro".into(),
         "3.0" | "vgfm-3.0" => "jimeng-video-3.0".into(),

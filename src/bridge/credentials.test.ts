@@ -99,6 +99,47 @@ describe("credentials bridge", () => {
     ).rejects.toMatchObject({ code: "validation_failed", field: "apiKey" });
   });
 
+  it("creates an access_secret credential with AK/SK", async () => {
+    mockedInvoke.mockResolvedValue(credential);
+
+    await expect(
+      createCredential({
+        providerName: "kling",
+        displayName: "可灵 Kling",
+        baseUrl: "https://api.klingai.com",
+        modelName: "kling-v1",
+        credentialType: "access_secret",
+        accessKey: "  AK-123  ",
+        secretKey: "  SK-456  ",
+      }),
+    ).resolves.toEqual(credential);
+
+    expect(mockedInvoke).toHaveBeenCalledWith("credential_v1_create", {
+      request: {
+        providerName: "kling",
+        displayName: "可灵 Kling",
+        baseUrl: "https://api.klingai.com",
+        modelName: "kling-v1",
+        credentialType: "access_secret",
+        accessKey: "AK-123",
+        secretKey: "SK-456",
+      },
+    });
+  });
+
+  it("rejects access_secret create missing secret key", async () => {
+    await expect(
+      createCredential({
+        providerName: "kling",
+        displayName: "可灵 Kling",
+        baseUrl: "https://api.klingai.com",
+        modelName: "kling-v1",
+        credentialType: "access_secret",
+        accessKey: "AK-123",
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed", field: "secretKey" });
+  });
+
   it("rejects invalid credential id on update", async () => {
     await expect(
       updateCredential({

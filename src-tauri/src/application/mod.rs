@@ -40,6 +40,7 @@ pub mod generation_service;
 pub mod generation_submit_service;
 pub mod image_analyzer;
 pub mod layout_engine;
+pub mod llm_task_runtime;
 pub mod manga_service;
 pub mod mcp_client;
 pub mod memory_canvas_service;

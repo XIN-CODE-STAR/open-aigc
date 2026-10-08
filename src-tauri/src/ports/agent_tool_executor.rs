@@ -23,6 +23,22 @@ pub struct ToolContext {
     pub current_user_message: Option<String>,
 }
 
+impl ToolContext {
+    /// 沙箱路径校验：拒绝策略禁止的路径（如系统目录、密钥目录）。
+    /// 未接入策略时（sandbox = None）放行，保持向后兼容。
+    pub fn ensure_path_allowed(&self, path: &std::path::Path) -> Result<(), AgentToolError> {
+        if let Some(policy) = &self.sandbox {
+            if !policy.is_path_allowed(path) {
+                return Err(AgentToolError::ExecutionFailed {
+                    tool: "<sandbox>".to_owned(),
+                    reason: format!("沙箱策略拒绝访问路径：{}", path.display()),
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
 /// 工具执行结果。
 #[derive(Debug, Clone)]
 pub struct ToolExecutionResult {

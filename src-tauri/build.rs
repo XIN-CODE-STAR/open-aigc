@@ -50,6 +50,7 @@ fn main() {
             "agent_v1_debug_log",
             "memory_v1_status",
             "memory_v1_search",
+            "memory_v1_everos_set_enabled",
             "manga_v1_create_project",
             "manga_v1_list_projects",
             "manga_v1_get_project",

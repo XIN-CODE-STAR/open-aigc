@@ -15,7 +15,7 @@ describe("CredentialFormDialog", () => {
     const grid = document.body.querySelector(".preset-grid");
     expect(grid).not.toBeNull();
     const cards = document.body.querySelectorAll(".preset-card");
-    expect(cards.length).toBe(20);
+    expect(cards.length).toBe(21);
     wrapper.unmount();
   });
 
