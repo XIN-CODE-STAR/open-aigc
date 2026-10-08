@@ -27,7 +27,7 @@
 | `adapters/providers/kling_video.rs` | 快影适配器（AK/SK→JWT，文生视频/图生视频），完整可用 |
 | `adapters/providers/seedance_video.rs` | Seedance 适配器，完整可用 |
 | `adapters/providers/grok_generation.rs` | grok 生成（含视频能力分支） |
-| 即梦视频 | 走本地 jimeng-api Node 代理（常驻服务，remote_job_id 前缀 `proxy:video:`；模型 `jimeng-video-seedance-2.0` 等）。代理代码在 `services/jimeng-api/` |
+| 即梦视频 | 走本地 jimeng-free-api-all 代理（常驻服务，端口 5100，开机自启；remote_job_id 前缀 `proxy:video:`；模型 `jimeng-video-seedance-2.0` 等）。代理运行目录 `services/jimeng-free-api-all-v128/`（v1.2.8 便携版，gitignore；自启 vbs 指向其 `scripts/start.ps1`） |
 | `application/creative_runtime_service.rs` | 四阶段流水线编排器：Submit → Poll → Import → Compose，带 `RuntimeEventBus` |
 | `application/creative_poll_worker.rs` | 轮询 + 下载（`poll_once/wait_and_download`） |
 | `application/creative_plan_builder.rs` | CreativeBrief → CreativePlan（shots 含 duration_secs） |

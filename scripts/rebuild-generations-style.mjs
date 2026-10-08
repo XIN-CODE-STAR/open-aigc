@@ -17,13 +17,35 @@ const postcss = (await import(pathToFileURL(postcssPath).href)).default;
 const FILE = "src/modules/generations/pages/GenerationsPage.vue";
 
 const LIVE = new Set([
-  "grok-shell", "grok-welcome", "grok-conversation", "grok-prefs",
-  "prefs-close", "prefs-head", "prefs-label", "prefs-section",
-  "analysis-caption", "analysis-close", "analysis-content", "analysis-header", "analysis-item",
-  "analysis-item-name", "analysis-panel", "analysis-tag", "analysis-tags", "analysis-title",
-  "analyze-btn", "semantic-analysis-section", "spin",
-  "analysis-panel-enter-active", "analysis-panel-enter-from", "analysis-panel-leave-active", "analysis-panel-leave-to",
-  "drawer-enter-active", "drawer-enter-from", "drawer-leave-active", "drawer-leave-to",
+  "grok-shell",
+  "grok-welcome",
+  "grok-conversation",
+  "grok-prefs",
+  "prefs-close",
+  "prefs-head",
+  "prefs-label",
+  "prefs-section",
+  "analysis-caption",
+  "analysis-close",
+  "analysis-content",
+  "analysis-header",
+  "analysis-item",
+  "analysis-item-name",
+  "analysis-panel",
+  "analysis-tag",
+  "analysis-tags",
+  "analysis-title",
+  "analyze-btn",
+  "semantic-analysis-section",
+  "spin",
+  "analysis-panel-enter-active",
+  "analysis-panel-enter-from",
+  "analysis-panel-leave-active",
+  "analysis-panel-leave-to",
+  "drawer-enter-active",
+  "drawer-enter-from",
+  "drawer-leave-active",
+  "drawer-leave-to",
 ]);
 
 // 从清理前的提交取原始样式（模板已在此后独立演进）
@@ -81,5 +103,8 @@ console.log("kept nodes:", kept.length, "| css lines:", css.split("\n").length);
 const current = readFileSync(FILE, "utf8");
 const cs = current.indexOf("<style scoped>");
 const ce = current.indexOf("</style>");
-writeFileSync(FILE, current.slice(0, cs) + "<style scoped>\n" + css.trim() + "\n" + current.slice(ce));
+writeFileSync(
+  FILE,
+  current.slice(0, cs) + "<style scoped>\n" + css.trim() + "\n" + current.slice(ce),
+);
 console.log("written");

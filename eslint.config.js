@@ -12,10 +12,12 @@ export default typescriptEslint.config(
       "dist/**",
       "node_modules/**",
       ".trae/**",
+      ".zcode/**",
+      ".archive/**",
       "src-tauri/gen/**",
       "src-tauri/target/**",
       "work/**",
-      // services/ 下的代理子项目（jimeng-api、jimeng-free-api-all 等）有独立工具链，
+      // services/ 下的即梦代理子项目（jimeng-free-api-all 便携版）有独立工具链，
       // 构建产物与源码均不由本仓库 lint。
       "services/**",
     ],

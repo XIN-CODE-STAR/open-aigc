@@ -56,6 +56,7 @@ playwright-report/
 # IDE / AI 助手本地数据
 .trae/
 .claude/
+.zcode/
 .serial_mcp/
 .cursor/
 
@@ -114,8 +115,13 @@ services/*/.git-upstream-remote/
 # mimosa security scanner local state
 .mimosa/
 
+# WorkBuddy AI 本地工作数据（记忆/任务/会话，不进仓库）
+.workbuddy-ai/
+
 # 本地运行时产物（不进仓库）
 .playwright-cli/
+# 归档目录（本地清理暂存，确认无误后可整目录删除）
+.archive/
 # ffmpeg sidecar 二进制（scripts/fetch-ffmpeg.mjs 下载，打包时由 tauri externalBin 引用）
 src-tauri/binaries/
 src-tauri/.vault/
