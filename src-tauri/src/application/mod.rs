@@ -27,6 +27,7 @@ pub mod creative_state_service;
 pub mod credential_manager;
 pub mod credential_service;
 pub mod critic_service;
+pub mod diagnostics;
 pub mod edit_understanding_service;
 pub mod error;
 pub mod event_bus;

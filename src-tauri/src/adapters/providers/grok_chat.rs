@@ -265,7 +265,14 @@ impl StreamAccumulator {
             })
             .collect();
         // 与非流式语义保持一致：有工具调用且无文本时 content 为 None。
-        let content = if self.content.is_empty() && !tool_calls.is_empty() {
+        //
+        // 判据必须是 trim() 后的空，而不是 is_empty()：模型（GLM 等）在返回
+        // tool_calls 时经常带一个纯空白 content（如 "\n"）。此前用 is_empty()
+        // 判断，"\n" 会落到 Some("\n") 分支，随后 MessageDraft::assistant 的
+        // validate_content 以 `Required { field: "content" }` 拒绝，导致整步被
+        // 标 Failed 且工具从未执行（2026-10-08 画布便签 0% 故障的真实原因）。
+        let has_text = !self.content.trim().is_empty();
+        let content = if !has_text {
             None
         } else {
             Some(self.content)
@@ -609,9 +616,69 @@ mod tests {
         assert_eq!(parsed.tool_calls[0].function.name, "image_generation");
     }
 
+    /// 回归（2026-10-08 画布便签 0% 故障）：模型返回 tool_calls 时常常带一个
+    /// **纯空白** content（如 "\n"）。若只判 `is_empty()`，"\n" 会变成
+    /// Some("\n")，随后被 MessageDraft::assistant 的 validate_content 拒绝，
+    /// 整步标 Failed 且工具永不执行。此处锁定：空白 content + 有工具 ⇒ None。
     #[test]
-    fn rejects_empty_choices() {
-        let raw = ChatCompletionResponse {
+    fn whitespace_content_with_tool_calls_becomes_none() {
+        let acc = StreamAccumulator {
+            model: "glm-4.5-air".to_owned(),
+            content: "\n".to_owned(),
+            finish_reason: Some("tool_calls".to_owned()),
+            tool_calls: vec![ToolCallAcc {
+                id: "call_1".to_owned(),
+                name: "canvas_add_note".to_owned(),
+                arguments: r#"{"text":"项目主线是暗色调科技感"}"#.to_owned(),
+            }],
+            ..Default::default()
+        };
+
+        let response = acc.into_response();
+        assert_eq!(
+            response.content, None,
+            "纯空白 content 在带工具调用时必须归一化为 None，否则会被 validate_content 拒绝"
+        );
+        assert_eq!(response.tool_calls.len(), 1);
+
+        // 端到端：归一化后的响应必须能构造出合法的 assistant 草稿。
+        let draft = crate::domain::agent::MessageDraft::assistant(
+            uuid::Uuid::new_v4().to_string(),
+            response.content.clone(),
+            response.tool_calls.clone(),
+            Some(response.model.clone()),
+            Some(response.finish_reason.clone()),
+            None,
+            None,
+        );
+        assert!(
+            draft.is_ok(),
+            "归一化后必须能落库，实际错误: {:?}",
+            draft.err()
+        );
+    }
+
+    /// 反向对照：有真实文本时 content 必须保留（不能被误归一化掉）。
+    #[test]
+    fn real_content_with_tool_calls_is_preserved() {
+        let acc = StreamAccumulator {
+            model: "glm-4.5-air".to_owned(),
+            content: "我来创建一条便签。".to_owned(),
+            finish_reason: Some("tool_calls".to_owned()),
+            tool_calls: vec![ToolCallAcc {
+                id: "call_1".to_owned(),
+                name: "canvas_add_note".to_owned(),
+                arguments: "{}".to_owned(),
+            }],
+            ..Default::default()
+        };
+
+        let response = acc.into_response();
+        assert_eq!(response.content.as_deref(), Some("我来创建一条便签。"));
+    }
+
+    #[test]
+    fn rejects_empty_choices() {        let raw = ChatCompletionResponse {
             choices: vec![],
             model: "grok-4".to_owned(),
             usage: None,

@@ -1101,7 +1101,14 @@ impl AgentService {
                 Err(e) => {
                     // 步骤失败。失败原因必须落日志：此前 Err(_e) 静默吞错，
                     // 20:55 复盘中工具调用中断的真实原因无从追查。
+                    // 2026-10-08 补充：stderr 在本环境（Tauri CLI 派生）不落盘，
+                    // 真实异常因此仍然丢失 ⇒ 改为同时写诊断文件。
                     eprintln!("[Agent] plan step {} failed: {e}", step.index);
+                    crate::diag_fail!(
+                        "agent.step",
+                        "plan step {} failed (conv={conversation_id}): {e}",
+                        step.index
+                    );
                     self.with_plan_repository(|repo| {
                         repo.update_plan_step(&plan.id, step.index, PlanStepStatus::Failed)
                             .map_err(AppError::from)
@@ -1207,6 +1214,8 @@ impl AgentService {
     ) -> Result<(), AppError> {
         // 流式片段序号计数器（Cell 以便在 Fn 回调内部递增）。
         let stream_chunk_index = std::cell::Cell::new(0u32);
+        // 上一条已落库的 assistant 文本，用于识别并跳过完全重复的消息。
+        let mut last_assistant_content = String::new();
         loop {
             *iterations += 1;
             if *iterations > EXECUTE_MAX_ITERATIONS {
@@ -1248,6 +1257,10 @@ impl AgentService {
                         _ => "",
                     };
                     let error_msg = format!("LLM 请求失败 (HTTP {status})：{detail}{hint}");
+                    crate::diag_fail!(
+                        "agent.llm",
+                        "remote error HTTP {status} (conv={conversation_id}): {detail}"
+                    );
                     self.mark_conversation_error(conversation_id, &error_msg)?;
                     emit_event(
                         app,
@@ -1261,6 +1274,10 @@ impl AgentService {
                 }
                 Err(other) => {
                     let error_msg = other.to_string();
+                    crate::diag_fail!(
+                        "agent.llm",
+                        "llm error (conv={conversation_id}): {error_msg}"
+                    );
                     self.mark_conversation_error(conversation_id, &error_msg)?;
                     emit_event(
                         app,
@@ -1275,27 +1292,45 @@ impl AgentService {
             };
 
             // 持久化 assistant 消息。
-            let assistant_record = self.with_agent_repository(|repo| {
-                repo.append_message(MessageDraft::assistant(
-                    conversation_id.to_owned(),
-                    response.content.clone(),
-                    response.tool_calls.clone(),
-                    Some(response.model.clone()),
-                    Some(response.finish_reason.clone()),
-                    response.prompt_tokens,
-                    response.completion_tokens,
-                )?)
-                .map_err(AppError::from)
-            })?;
-            emit_event(
-                app,
-                conversation_id,
-                AgentEvent::MessageAppended {
-                    conversation_id: conversation_id.to_owned(),
-                    message: assistant_record.clone(),
-                },
-            );
-            *last_assistant = Some(assistant_record);
+            // 去重：多轮工具调用之间模型常反复输出**完全相同**的一句话，
+            // 无条件 append 会让同一条消息落库多次（2026-10-08 复盘：7 次）。
+            let is_duplicate_of_previous = response
+                .content
+                .as_deref()
+                .map(|c| c.trim() == last_assistant_content.trim() && !c.trim().is_empty())
+                .unwrap_or(false);
+            let assistant_record = if is_duplicate_of_previous {
+                crate::diag_fail!(
+                    "agent.dedup",
+                    "skip duplicate assistant message (conv={conversation_id})"
+                );
+                None
+            } else {
+                Some(self.with_agent_repository(|repo| {
+                    repo.append_message(MessageDraft::assistant(
+                        conversation_id.to_owned(),
+                        response.content.clone(),
+                        response.tool_calls.clone(),
+                        Some(response.model.clone()),
+                        Some(response.finish_reason.clone()),
+                        response.prompt_tokens,
+                        response.completion_tokens,
+                    )?)
+                    .map_err(AppError::from)
+                })?)
+            };
+            if let Some(record) = assistant_record {
+                emit_event(
+                    app,
+                    conversation_id,
+                    AgentEvent::MessageAppended {
+                        conversation_id: conversation_id.to_owned(),
+                        message: record.clone(),
+                    },
+                );
+                *last_assistant = Some(record);
+                last_assistant_content = response.content.clone().unwrap_or_default();
+            }
             *last_finish_reason = response.finish_reason.clone();
 
             // 若没有工具调用，步骤完成。
@@ -1471,6 +1506,11 @@ impl AgentService {
                 let reason = error.to_string();
                 eprintln!(
                     "[AgentTool] execute failed name={} err={reason}",
+                    tool_call.function.name
+                );
+                crate::diag_fail!(
+                    "agent.tool",
+                    "tool {} failed (conv={conversation_id}): {reason}",
                     tool_call.function.name
                 );
                 (

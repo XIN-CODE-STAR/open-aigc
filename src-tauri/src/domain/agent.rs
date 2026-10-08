@@ -214,6 +214,14 @@ impl MessageDraft {
         prompt_tokens: Option<i64>,
         completion_tokens: Option<i64>,
     ) -> Result<Self, AgentValidationError> {
+        // 带 tool_calls 的一轮里，纯空白 content 是合法的（模型只调工具、不写话），
+        // 规范化为 None 而不是拒绝。此前它会撞上 validate_content 的
+        // `Required { field: "content" }`，把整步标 Failed 并使工具永不执行
+        // （2026-10-08 画布便签 0% 故障）。
+        let content = match content {
+            Some(c) if c.trim().is_empty() && !tool_calls.is_empty() => None,
+            other => other,
+        };
         if let Some(c) = content.as_deref() {
             Self::validate_content(c)?;
         }

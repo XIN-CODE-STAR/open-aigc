@@ -263,6 +263,8 @@ impl ExecutionEngine {
         all_invocations: &mut Vec<ToolInvocationRecord>,
     ) -> Result<(), AppError> {
         let stream_chunk_index = std::cell::Cell::new(0u32);
+        // 上一条已落库的 assistant 文本，用于识别并跳过完全重复的消息。
+        let mut last_assistant_content = String::new();
         loop {
             *iterations += 1;
             if *iterations > EXECUTE_MAX_ITERATIONS {
@@ -324,27 +326,50 @@ impl ExecutionEngine {
                 }
             };
 
-            let assistant_record = self.with_agent_repository(|repo| {
-                repo.append_message(MessageDraft::assistant(
-                    conversation_id.to_owned(),
-                    response.content.clone(),
-                    response.tool_calls.clone(),
-                    Some(response.model.clone()),
-                    Some(response.finish_reason.clone()),
-                    response.prompt_tokens,
-                    response.completion_tokens,
-                )?)
-                .map_err(AppError::from)
-            })?;
-            super::agent_service::emit_event(
-                app,
-                conversation_id,
-                AgentEvent::MessageAppended {
-                    conversation_id: conversation_id.to_owned(),
-                    message: assistant_record.clone(),
-                },
-            );
-            *last_assistant = Some(assistant_record);
+            // 去重：工具调用轮次里模型常常「只说一句就调工具」，且会在多轮之间
+            // 反复输出**完全相同**的那句话。此前每轮都无条件 append，于是同一条
+            // 「便签已创建。」在一个会话里落库 7 次（2026-10-08 复盘）。
+            // 判据：内容与「上一条 assistant 消息」完全一致时，不再重复落库——
+            // 本轮的工具调用仍照常执行，只是不再产生一条重复的可见消息。
+            let is_duplicate_of_previous = response
+                .content
+                .as_deref()
+                .map(|c| c.trim() == last_assistant_content.trim() && !c.trim().is_empty())
+                .unwrap_or(false);
+
+            let assistant_record = if is_duplicate_of_previous {
+                crate::diag_fail!(
+                    "agent.dedup",
+                    "skip duplicate assistant message (conv={conversation_id}, {} chars)",
+                    response.content.as_deref().unwrap_or("").chars().count()
+                );
+                None
+            } else {
+                Some(self.with_agent_repository(|repo| {
+                    repo.append_message(MessageDraft::assistant(
+                        conversation_id.to_owned(),
+                        response.content.clone(),
+                        response.tool_calls.clone(),
+                        Some(response.model.clone()),
+                        Some(response.finish_reason.clone()),
+                        response.prompt_tokens,
+                        response.completion_tokens,
+                    )?)
+                    .map_err(AppError::from)
+                })?)
+            };
+            if let Some(record) = assistant_record {
+                super::agent_service::emit_event(
+                    app,
+                    conversation_id,
+                    AgentEvent::MessageAppended {
+                        conversation_id: conversation_id.to_owned(),
+                        message: record.clone(),
+                    },
+                );
+                *last_assistant = Some(record);
+                last_assistant_content = response.content.clone().unwrap_or_default();
+            }
             *last_finish_reason = response.finish_reason.clone();
 
             if response.tool_calls.is_empty() {

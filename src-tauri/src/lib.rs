@@ -204,6 +204,8 @@ pub fn run() {
         .setup(|app| {
             let workspace_directory = app.path().app_local_data_dir()?.join("workspace");
             let database_path = workspace_directory.join("aigc-studio.sqlite3");
+            // 诊断日志接早：失败要能落盘取证（本环境 stderr 不落盘）。
+            crate::application::diagnostics::init(&workspace_directory);
             let workspace_repository = SqliteWorkspaceRepository::open(&database_path)?;
             let asset_repository = SqliteAssetRepository::open(&database_path)?;
             let resource_repository = SqliteResourceRepository::open(&database_path)?;
