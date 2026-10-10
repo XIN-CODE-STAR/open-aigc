@@ -16,12 +16,16 @@ use tauri::{AppHandle, Emitter};
 use crate::ports::resource_connector::AccountStatus;
 
 /// 健康检查结果事件 payload。
+///
+/// `reason`：`"status"` = 账号状态变化；`"credits"` = 仅积分余额刷新
+/// （此时 `oldStatus == newStatus`）。UI 据此决定是否重载账号列表。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthUpdatedEvent {
     pub account_id: String,
     pub old_status: String,
     pub new_status: String,
+    pub reason: &'static str,
 }
 
 /// 即梦账号积分快照（`/token/points` 返回的 `points` 字段）。
@@ -218,6 +222,7 @@ fn run_health_check(database_path: &Path, app: Option<&AppHandle>) {
                         account_id: account_id.clone(),
                         old_status: old_status.clone(),
                         new_status: new_status.clone(),
+                        reason: "status",
                     },
                 );
             }
@@ -229,6 +234,19 @@ fn run_health_check(database_path: &Path, app: Option<&AppHandle>) {
                         "UPDATE resource_accounts SET last_health_check_at = ?2, extra_json = ?3 WHERE id = ?1",
                         rusqlite::params![account_id, now, extra],
                     );
+                    // 余额是 UI 要展示的数据，写回后通知前端重载账号列表；
+                    // 此前这个事件只在状态变化时发，而前端也没人监听。
+                    if let Some(handle) = app {
+                        let _ = handle.emit(
+                            "account://health-updated",
+                            HealthUpdatedEvent {
+                                account_id: account_id.clone(),
+                                old_status: old_status.clone(),
+                                new_status: new_status.clone(),
+                                reason: "credits",
+                            },
+                        );
+                    }
                 }
                 None => {
                     let _ = conn.execute(

@@ -26,6 +26,7 @@ import { isGenerationSourceFor, type GenerationMediaKind } from "../generationSo
 import { useRoute, useRouter } from "vue-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 // Phase 1：组件拆分
 import ConversationRail from "../components/ConversationRail.vue";
@@ -240,6 +241,8 @@ const frameRateMenuRef = ref<HTMLElement | null>(null);
 const isDraggingFile = ref(false);
 let dragCounter = 0;
 let tauriDragDropUnlisten: (() => void) | null = null;
+/** 账号健康/积分刷新事件的取消订阅句柄。 */
+let accountHealthUnlisten: UnlistenFn | null = null;
 
 function onDocDragEnter(): void {
   dragCounter++;
@@ -360,6 +363,16 @@ onMounted(async () => {
       console.warn("[drag-drop] Failed to register Tauri native drag-drop handler:", err);
     }
   }
+
+  // 账号健康检查会刷新积分余额（写进 extra_json）——不重载账号列表，
+  // 「生成来源」里就永远显示不出积分（该事件此前发了但无人监听）。
+  try {
+    accountHealthUnlisten = await listen("account://health-updated", () => {
+      void loadCredentials();
+    });
+  } catch (err) {
+    console.warn("[account-health] Failed to subscribe:", err);
+  }
 });
 
 onUnmounted(() => {
@@ -369,6 +382,8 @@ onUnmounted(() => {
   document.removeEventListener("drop", onDocDrop);
   tauriDragDropUnlisten?.();
   tauriDragDropUnlisten = null;
+  accountHealthUnlisten?.();
+  accountHealthUnlisten = null;
 });
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
