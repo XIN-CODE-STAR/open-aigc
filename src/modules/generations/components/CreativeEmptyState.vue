@@ -243,9 +243,6 @@ function pickExample(example: ExamplePrompt): void {
                 ? 'image_generation'
                 : undefined
           "
-          :source-label="
-            creationMode === 'image' || creationMode === 'video' ? '生成来源' : undefined
-          "
           pop-placement="bottom"
           @select="(id: string) => emit('select-credential', id)"
           @select-account="(id: string) => emit('select-account', id)"

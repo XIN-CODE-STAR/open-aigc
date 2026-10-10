@@ -320,9 +320,6 @@ onBeforeUnmount(() => {
             :resource-accounts="resourceAccounts"
             :selected-account-id="selectedAccountId"
             :task-type="creationMode === 'video' ? 'video_generation' : 'image_generation'"
-            :source-label="
-              creationMode === 'image' || creationMode === 'video' ? '生成来源' : undefined
-            "
             @select="onSelectCredential"
             @select-account="(id: string) => emit('select-account', id)"
           />

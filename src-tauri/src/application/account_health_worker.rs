@@ -24,6 +24,19 @@ pub struct HealthUpdatedEvent {
     pub new_status: String,
 }
 
+/// 即梦账号积分快照（`/token/points` 返回的 `points` 字段）。
+///
+/// 顺带取回并落进 `resource_accounts.extra_json`，供 UI 在「生成来源」里
+/// 展示账号剩余积分——此前这段数据被解析出来后直接丢掉了。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JimengCredits {
+    pub gift: i64,
+    pub purchase: i64,
+    pub vip: i64,
+    pub total: i64,
+}
+
 /// 账号健康检查配置。
 #[derive(Debug, Clone)]
 pub struct AccountHealthConfig {
@@ -156,18 +169,42 @@ fn run_health_check(database_path: &Path, app: Option<&AppHandle>) {
         .unwrap_or_default();
 
     for (account_id, provider_id, credential_key, _base_url, old_status) in accounts {
-        let new_status =
+        let (new_status, credits) =
             check_single_account(database_path, &provider_id, &credential_key, &old_status);
 
+        let now = time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default();
+        // 积分每次都写：余额变化是常态，而它不会改变账号状态。
+        let credits_json = credits.map(|c| {
+            serde_json::json!({
+                "credits": {
+                    "total": c.total,
+                    "gift": c.gift,
+                    "purchase": c.purchase,
+                    "vip": c.vip,
+                },
+                "creditsCheckedAt": now,
+            })
+            .to_string()
+        });
+
         if new_status != old_status {
-            // 回写状态
-            let now = time::OffsetDateTime::now_utc()
-                .format(&time::format_description::well_known::Rfc3339)
-                .unwrap_or_default();
-            let _ = conn.execute(
-                "UPDATE resource_accounts SET status = ?2, last_health_check_at = ?3, updated_at = ?3 WHERE id = ?1",
-                rusqlite::params![account_id, new_status, now],
-            );
+            // 回写状态（若同时取到积分，一并写入）
+            match &credits_json {
+                Some(extra) => {
+                    let _ = conn.execute(
+                        "UPDATE resource_accounts SET status = ?2, last_health_check_at = ?3, updated_at = ?3, extra_json = ?4 WHERE id = ?1",
+                        rusqlite::params![account_id, new_status, now, extra],
+                    );
+                }
+                None => {
+                    let _ = conn.execute(
+                        "UPDATE resource_accounts SET status = ?2, last_health_check_at = ?3, updated_at = ?3 WHERE id = ?1",
+                        rusqlite::params![account_id, new_status, now],
+                    );
+                }
+            }
 
             eprintln!(
                 "[AccountHealth] Account {account_id} ({provider_id}): {old_status} -> {new_status}"
@@ -185,35 +222,44 @@ fn run_health_check(database_path: &Path, app: Option<&AppHandle>) {
                 );
             }
         } else {
-            // 状态未变，仅更新 last_health_check_at
-            let now = time::OffsetDateTime::now_utc()
-                .format(&time::format_description::well_known::Rfc3339)
-                .unwrap_or_default();
-            let _ = conn.execute(
-                "UPDATE resource_accounts SET last_health_check_at = ?2 WHERE id = ?1",
-                rusqlite::params![account_id, now],
-            );
+            // 状态未变：仍更新检查时间，并把刚取到的积分余额写回去
+            match &credits_json {
+                Some(extra) => {
+                    let _ = conn.execute(
+                        "UPDATE resource_accounts SET last_health_check_at = ?2, extra_json = ?3 WHERE id = ?1",
+                        rusqlite::params![account_id, now, extra],
+                    );
+                }
+                None => {
+                    let _ = conn.execute(
+                        "UPDATE resource_accounts SET last_health_check_at = ?2 WHERE id = ?1",
+                        rusqlite::params![account_id, now],
+                    );
+                }
+            }
         }
     }
 }
 
-/// 检查单个账号的 session 有效性。
+/// 检查单个账号的 session 有效性，并尽量顺带取回积分余额。
+///
+/// 返回 `(status, credits)`：积分是附加信息，取不到不影响状态判定。
 fn check_single_account(
     database_path: &Path,
     provider_id: &str,
     credential_key: &str,
     old_status: &str,
-) -> String {
+) -> (String, Option<JimengCredits>) {
     let normalized = provider_id.to_lowercase();
 
     // 从加密保险库读取 session
     let session = match read_keychain(database_path, credential_key) {
         Ok(s) => s,
-        Err(_) => return AccountStatus::NeedLogin.as_str().to_owned(),
+        Err(_) => return (AccountStatus::NeedLogin.as_str().to_owned(), None),
     };
 
     if session.trim().is_empty() {
-        return AccountStatus::NeedLogin.as_str().to_owned();
+        return (AccountStatus::NeedLogin.as_str().to_owned(), None);
     }
 
     // 根据 provider 选择检查方式
@@ -224,24 +270,26 @@ fn check_single_account(
         check_jimeng_session(&session, old_status)
     } else {
         // 未知 provider，保持当前状态（不轻易标记为异常）
-        AccountStatus::Active.as_str().to_owned()
+        (AccountStatus::Active.as_str().to_owned(), None)
     }
 }
 
-/// 即梦 session 有效性检查。
+/// 即梦 session 有效性检查，并顺带取回积分余额。
 ///
 /// 原生 /web/api/media/user/info/ 端点已失效：无签名请求即使会话有效
 /// 也返回整页 HTML（SPA 文本含 "login" 字样），导致有效会话被误判为
 /// 需重新登录。改走 jimeng-api 代理的 /token/points：能查到积分即会话
 /// 有效；代理不可达时无法验证，保持原状态（此时生成同样不可用，
 /// 但不误报登录失效）。
-fn check_jimeng_session(session_id: &str, old_status: &str) -> String {
+///
+/// 返回 `(status, credits)`。积分是**附加信息**：解析失败只丢积分，不影响状态判定。
+fn check_jimeng_session(session_id: &str, old_status: &str) -> (String, Option<JimengCredits>) {
     // jm_ 前缀是 jimeng-free-api-all 新代理的托管 API Key（账号池模式），
     // 不是即梦 sessionid：拿它查积分必然 1015，会把健康账号误标 need_login
     // （00:54 误报复盘）。其有效性由代理账号池维护，真实故障在提交时
     // 由工具如实上报，这里视为可用。
     if session_id.starts_with("jm_") {
-        return AccountStatus::Active.as_str().to_owned();
+        return (AccountStatus::Active.as_str().to_owned(), None);
     }
     let url = format!(
         "http://127.0.0.1:{}/token/points",
@@ -257,16 +305,38 @@ fn check_jimeng_session(session_id: &str, old_status: &str) -> String {
     match response {
         Ok(resp) => {
             let body = resp.into_string().unwrap_or_default();
-            // 成功：[{ token, points: { totalCredit, ... } }]
+            // 成功：[{ token, points: { totalCredit, giftCredit, purchaseCredit, vipCredit } }]
             if body.trim_start().starts_with('[') && body.contains("totalCredit") {
-                AccountStatus::Active.as_str().to_owned()
+                (
+                    AccountStatus::Active.as_str().to_owned(),
+                    parse_jimeng_credits(&body),
+                )
             } else {
                 // 代理返回错误对象：登录失效、会话无效等
-                AccountStatus::NeedLogin.as_str().to_owned()
+                (AccountStatus::NeedLogin.as_str().to_owned(), None)
             }
         }
-        Err(_) => old_status.to_owned(),
+        Err(_) => (old_status.to_owned(), None),
     }
+}
+
+/// 从 `/token/points` 的响应里取第一个 token 的积分。解析失败返回 `None`。
+fn parse_jimeng_credits(body: &str) -> Option<JimengCredits> {
+    let parsed: serde_json::Value = serde_json::from_str(body).ok()?;
+    let points = parsed.as_array()?.first()?.get("points")?;
+    let total = points.get("totalCredit").and_then(serde_json::Value::as_i64)?;
+    let num = |key: &str| {
+        points
+            .get(key)
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0)
+    };
+    Some(JimengCredits {
+        gift: num("giftCredit"),
+        purchase: num("purchaseCredit"),
+        vip: num("vipCredit"),
+        total,
+    })
 }
 
 /// 从本地加密保险库读取密钥。
@@ -274,4 +344,48 @@ fn read_keychain(database_path: &Path, key: &str) -> Result<String, String> {
     let vault = crate::adapters::file_vault::FileVault::from_database_path(database_path)
         .map_err(|e| e.to_string())?;
     vault.get_secret(key).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 代理 `/token/points` 的成功响应形态（截自真实响应结构）。
+    const OK_BODY: &str = r#"[{"token":"abc","points":{"giftCredit":66,"purchaseCredit":0,"vipCredit":0,"totalCredit":66}}]"#;
+
+    #[test]
+    fn parses_credits_from_points_response() {
+        let credits = parse_jimeng_credits(OK_BODY).expect("应解析出积分");
+        assert_eq!(credits.gift, 66);
+        assert_eq!(credits.purchase, 0);
+        assert_eq!(credits.vip, 0);
+        assert_eq!(credits.total, 66);
+    }
+
+    #[test]
+    fn missing_optional_breakdown_defaults_to_zero() {
+        let body = r#"[{"token":"abc","points":{"totalCredit":12}}]"#;
+        let credits = parse_jimeng_credits(body).expect("totalCredit 在就够");
+        assert_eq!(credits.total, 12);
+        assert_eq!(credits.gift, 0);
+    }
+
+    /// 积分是附加信息：这些形态都必须安静地返回 None，而不是 panic 或误报。
+    #[test]
+    fn returns_none_for_unparseable_shapes() {
+        for body in [
+            "",
+            "not json",
+            "{}",
+            "[]",
+            r#"[{"token":"abc"}]"#,
+            r#"[{"token":"abc","points":{}}]"#,
+            r#"{"error":"未登录"}"#,
+        ] {
+            assert!(
+                parse_jimeng_credits(body).is_none(),
+                "应返回 None：{body}"
+            );
+        }
+    }
 }

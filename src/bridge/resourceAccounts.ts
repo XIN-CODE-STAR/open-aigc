@@ -115,3 +115,42 @@ function parseRequest<T>(schema: z.ZodType<T>, value: unknown, fallback: string)
   }
   return result.data;
 }
+
+/**
+ * 账号的即梦积分余额快照。
+ *
+ * 由 `application/account_health_worker.rs` 每轮健康检查从代理的 `/token/points`
+ * 取回并写进 `resource_accounts.extra_json`——此前那段数据被解析出来后直接丢弃，
+ * 所以 UI 无处可显示。解析失败返回 `null`（老记录里没有这个键）。
+ */
+export interface AccountCredits {
+  total: number;
+  gift: number;
+  purchase: number;
+  vip: number;
+  checkedAt: string | null;
+}
+
+/** 从账号记录的 `extraJson` 里读积分快照；没有或格式不对时返回 `null`。 */
+export function parseAccountCredits(record: { extraJson: string }): AccountCredits | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(record.extraJson || "{}");
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const credits = (parsed as { credits?: unknown }).credits;
+  if (typeof credits !== "object" || credits === null) return null;
+  const raw = credits as Record<string, unknown>;
+  if (typeof raw.total !== "number") return null;
+  const num = (key: string): number => (typeof raw[key] === "number" ? (raw[key] as number) : 0);
+  const checkedAt = (parsed as { creditsCheckedAt?: unknown }).creditsCheckedAt;
+  return {
+    total: raw.total,
+    gift: num("gift"),
+    purchase: num("purchase"),
+    vip: num("vip"),
+    checkedAt: typeof checkedAt === "string" ? checkedAt : null,
+  };
+}

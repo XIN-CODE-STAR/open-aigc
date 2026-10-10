@@ -10,7 +10,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { CheckCircle2, ChevronDown, Sparkles } from "@lucide/vue";
 
 import type { CredentialRecord } from "../../../bridge/credentials";
-import type { ResourceAccountRecord } from "../../../bridge/resourceAccounts";
+import { parseAccountCredits, type ResourceAccountRecord } from "../../../bridge/resourceAccounts";
 import {
   isAccountAvailable,
   statusColor,
@@ -30,8 +30,6 @@ const props = defineProps<{
   selectedAccountId?: string | null;
   /** 当前创作模式（区分对话选择与图片/视频生成来源）。 */
   taskType?: "image_generation" | "video_generation";
-  /** 生成来源标识（图片/视频模式下显示在按钮前，如「生成来源」）。 */
-  sourceLabel?: string;
   disabled?: boolean;
   showStatusIndicator?: boolean;
 }>();
@@ -165,6 +163,18 @@ const selectedDisplay = computed(() => {
   return null;
 });
 
+/**
+ * 账号剩余积分的展示文本。
+ *
+ * 积分由 `account_health_worker` 每轮从代理 `/token/points` 取回并写进
+ * `extra_json`（见 `bridge/resourceAccounts.ts` 的 `parseAccountCredits`）。
+ * 没有积分信息（老记录 / 代理不可达 / 非即梦账号）时返回空串，不显示。
+ */
+function accountCreditsLabel(account: ResourceAccountRecord): string {
+  const credits = parseAccountCredits(account);
+  return credits ? `剩余 ${credits.total} 积分` : "";
+}
+
 /** 资源账号状态显示。 */
 function accountStatusLabel(status: string): string {
   switch (status) {
@@ -220,7 +230,6 @@ const emptySourceHint = computed(() => {
       @click="toggleMenu"
     >
       <Sparkles :size="11" />
-      <span v-if="sourceLabel" class="model-btn-source">{{ sourceLabel }}</span>
       <span class="model-btn-label">
         <template v-if="selectedDisplay">
           <span class="model-btn-name">{{ selectedDisplay.name }}</span>
@@ -339,6 +348,9 @@ const emptySourceHint = computed(() => {
                         : acc.status
                   }}
                 </span>
+                <span v-if="accountCreditsLabel(acc)" class="model-pop-credits">
+                  · {{ accountCreditsLabel(acc) }}
+                </span>
               </span>
             </div>
             <CheckCircle2 v-if="acc.id === selectedAccountId" :size="12" class="model-pop-check" />
@@ -391,14 +403,10 @@ const emptySourceHint = computed(() => {
 }
 
 /* 生成来源标识：与模型名之间的浅色前缀 */
-.model-btn-source {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+.model-pop-credits {
+  margin-left: 2px;
+  color: var(--color-text-tertiary);
   font-size: 10px;
-  font-weight: 500;
-  white-space: nowrap;
 }
 
 .model-btn-name {
