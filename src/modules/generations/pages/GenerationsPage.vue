@@ -22,6 +22,7 @@ import { useToast } from "../../../shared/ui/useToast";
 import { useGenerationHistory } from "../composables/useGenerationHistory";
 import { useAgentConversation } from "../composables/useAgentConversation";
 import { isGenerationNodeTool } from "../generationNodeTools";
+import { isGenerationSourceFor, type GenerationMediaKind } from "../generationSources";
 import { useRoute, useRouter } from "vue-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
@@ -391,6 +392,33 @@ const selectedCredential = computed(
 const selectedAccount = computed(
   () => resourceAccounts.value.find((a) => a.id === selectedAccountId.value) ?? null,
 );
+
+/** 直接生成模式要求的媒体类型；Agent 模式为 null（对话不按媒体过滤）。 */
+const generationMediaKind = computed<GenerationMediaKind | null>(() =>
+  creationMode.value === "video" ? "video" : creationMode.value === "image" ? "image" : null,
+);
+
+/**
+ * 直接生成可用的来源：选中的凭据/账号必须能产出当前模式的媒体，否则视为未选。
+ *
+ * 自动选中取的是 `credentials[0]`，很可能是一个 LLM 凭据（如 zhipu / glm-4.5-air）；
+ * 不设这道闸，视频任务会被发给 LLM provider。判定规则见 `../generationSources.ts`。
+ */
+const generationCredential = computed(() => {
+  const cred = selectedCredential.value;
+  return cred && isGenerationSourceFor(cred, generationMediaKind.value) ? cred : null;
+});
+
+const generationAccount = computed(() => {
+  const acc = selectedAccount.value;
+  if (!acc) return null;
+  return isGenerationSourceFor(
+    { providerName: acc.providerId, displayName: acc.displayName },
+    generationMediaKind.value,
+  )
+    ? acc
+    : null;
+});
 
 /** 是否有任何可用的模型来源（API 凭据或 AI 账号）。 */
 const hasAnyModelSource = computed(
@@ -1000,12 +1028,19 @@ async function send(): Promise<void> {
     return;
   }
 
-  // 直接生成模式：优先用 credential，其次用 account
+  // 直接生成模式：只用**能产出当前模式媒体**的来源（LLM 凭据不算生成来源）
+  const sourceCredential = generationCredential.value;
+  const sourceAccount = generationAccount.value;
+  if (!sourceCredential && !sourceAccount) {
+    toast.error("没有可用的生成来源：请在下方选择支持该媒体的模型或账号。");
+    return;
+  }
   sending.value = true;
   try {
     const enrichedPrompt = buildEnrichedPrompt(prompt);
-    const providerName = credential?.providerName ?? account?.providerId ?? "";
-    const modelName = credential?.modelName ?? `${account?.providerId ?? "jimeng"}-account`;
+    const providerName = sourceCredential?.providerName ?? sourceAccount?.providerId ?? "";
+    const modelName =
+      sourceCredential?.modelName ?? `${sourceAccount?.providerId ?? "jimeng"}-account`;
     const task = await history.createTask({
       providerName,
       modelName,
@@ -1041,8 +1076,8 @@ async function send(): Promise<void> {
       }
     }
 
-    const credentialId = credential?.id ?? account?.id ?? "";
-    const providerId = credential?.providerName ?? account?.providerId ?? "jimeng";
+    const credentialId = sourceCredential?.id ?? sourceAccount?.id ?? "";
+    const providerId = sourceCredential?.providerName ?? sourceAccount?.providerId ?? "jimeng";
     await queueV1SubmitAttempt({
       taskId: task.id,
       credentialId,

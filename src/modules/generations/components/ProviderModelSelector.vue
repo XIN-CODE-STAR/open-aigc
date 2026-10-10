@@ -17,6 +17,7 @@ import {
   statusLabel,
   type ProviderAccountStatus,
 } from "../../../bridge/providers";
+import { isGenerationSourceFor, type GenerationMediaKind } from "../generationSources";
 
 const props = defineProps<{
   /** API 凭据列表（deepseek、grok 等）。 */
@@ -48,19 +49,36 @@ const hasAnySource = computed(
   () => (filteredCredentials.value?.length ?? 0) > 0 || (filteredAccounts.value?.length ?? 0) > 0,
 );
 
-/**
- * API 凭据列表：展示全部已配置凭据，不按模型名过滤。
- * 多模态大模型（如 qwen-vl、grok）同样可以生成图片，名称过滤会误伤。
- */
-const filteredCredentials = computed(() => props.credentials ?? []);
-
-/** 根据 taskType 过滤资源账号。jimeng 同时支持图片和视频。 */
-const filteredAccounts = computed(() => {
-  const accounts = props.resourceAccounts ?? [];
-  if (!props.taskType) return accounts;
-  // jimeng 支持所有模式，直接返回
-  return accounts;
+/** 当前模式要求的媒体类型；Agent 模式（无 taskType）为 null ⇒ 不过滤。 */
+const requiredMediaKind = computed<GenerationMediaKind | null>(() => {
+  if (props.taskType === "video_generation") return "video";
+  if (props.taskType === "image_generation") return "image";
+  return null;
 });
+
+/**
+ * API 凭据列表。
+ *
+ * 图片/视频模式下**只列能产出该媒体的来源**：LLM 凭据（zhipu / glm-4.5-air 等）
+ * 在 Agent 模式里设置即可，若出现在生成模式下会被选中、把生成任务发给 LLM provider
+ * （2026-10-10 用户反馈）。判定规则见 `../generationSources.ts`——它镜像后端
+ * `generation_engine.rs` 的 provider 谓词与各 adapter 的 capabilities()。
+ */
+const filteredCredentials = computed(() =>
+  (props.credentials ?? []).filter((credential) =>
+    isGenerationSourceFor(credential, requiredMediaKind.value),
+  ),
+);
+
+/** 资源账号同理：即梦账号图片/视频都支持，但判定仍走同一套规则。 */
+const filteredAccounts = computed(() =>
+  (props.resourceAccounts ?? []).filter((account) =>
+    isGenerationSourceFor(
+      { providerName: account.providerId, displayName: account.displayName },
+      requiredMediaKind.value,
+    ),
+  ),
+);
 
 function toggleMenu(): void {
   if (props.disabled) return;
@@ -126,10 +144,10 @@ const selectedAccount = (): ResourceAccountRecord | null => {
   return props.resourceAccounts?.find((a) => a.id === id) ?? null;
 };
 
-/** 当前选中项的显示信息。 */
+/** 当前选中项的显示信息。不属于当前模式的来源（如视频模式下选中的 LLM 凭据）按未选中处理。 */
 const selectedDisplay = computed(() => {
   const cred = selectedCredential();
-  if (cred)
+  if (cred && filteredCredentials.value.some((c) => c.id === cred.id))
     return {
       name: cred.modelName,
       provider: cred.providerName,
@@ -137,7 +155,7 @@ const selectedDisplay = computed(() => {
       isAccount: false,
     };
   const acc = selectedAccount();
-  if (acc)
+  if (acc && filteredAccounts.value.some((a) => a.id === acc.id))
     return {
       name: acc.displayName || acc.providerId,
       provider: "即梦",
@@ -175,6 +193,21 @@ function accountStatusColor(status: string): string {
 }
 
 const showStatus = (): boolean => props.showStatusIndicator !== false;
+
+/**
+ * 无可用来源时的提示。区分两种情况——「一个都没配」与「配了但没有能出这种媒体的」；
+ * 后者若提示「请先配置模型」会让人以为配置丢了（2026-10-10 同类反馈）。
+ */
+const emptySourceHint = computed(() => {
+  if (hasAnySource.value) return "切换模型";
+  const hasAnyConfigured =
+    (props.credentials?.length ?? 0) > 0 || (props.resourceAccounts?.length ?? 0) > 0;
+  if (requiredMediaKind.value && hasAnyConfigured) {
+    const media = requiredMediaKind.value === "video" ? "视频" : "图片";
+    return `没有可用的生成来源：已配置的模型/账号都不支持生成${media}`;
+  }
+  return "请先配置模型或连接 AI 账号";
+});
 </script>
 
 <template>
@@ -183,7 +216,7 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
       type="button"
       class="model-btn"
       :disabled="!hasAnySource || disabled"
-      :title="!hasAnySource ? '请先配置模型或连接 AI 账号' : '切换模型'"
+      :title="emptySourceHint"
       @click="toggleMenu"
     >
       <Sparkles :size="11" />
@@ -193,7 +226,9 @@ const showStatus = (): boolean => props.showStatusIndicator !== false;
           <span class="model-btn-name">{{ selectedDisplay.name }}</span>
           <span class="model-btn-provider">{{ selectedDisplay.provider }}</span>
         </template>
-        <template v-else-if="!hasAnySource">未配置模型</template>
+        <template v-else-if="!hasAnySource">
+          {{ requiredMediaKind ? "无可用生成来源" : "未配置模型" }}
+        </template>
         <template v-else>选择模型</template>
       </span>
       <span
