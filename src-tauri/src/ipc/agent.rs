@@ -381,3 +381,44 @@ pub async fn agent_v1_search_assets_semantic(
         .unified_search(&request.query, limit)
         .map_err(IpcError::from)
 }
+
+/// 工作区数据库路径（与 `lib.rs` 的 setup 一致）。
+fn workspace_database_path(app: &AppHandle) -> Result<std::path::PathBuf, IpcError> {
+    app.path()
+        .app_local_data_dir()
+        .map(|dir| dir.join("workspace").join("aigc-studio.sqlite3"))
+        .map_err(|_| IpcError::task_failed())
+}
+
+/// 读取「大语言模型」的应用级设置（**作用于当前应用的所有对话**）。
+///
+/// 未设置时返回 `null`，此时各对话用各自 `conversation.credential_id`（旧行为）。
+#[tauri::command]
+pub fn agent_v1_get_llm_credential(app: AppHandle) -> Result<serde_json::Value, IpcError> {
+    let path = workspace_database_path(&app)?;
+    let credential_id = crate::application::app_settings::get_setting(
+        &path,
+        crate::application::app_settings::KEY_DEFAULT_LLM_CREDENTIAL,
+    );
+    Ok(serde_json::json!({ "credentialId": credential_id }))
+}
+
+/// 设置「大语言模型」：**所有对话**都改用它。传空串 = 清除该设置。
+///
+/// 这里只落库，不做凭据存在性校验——真正解析在 `AgentService` 里做，且会
+/// 「指向的凭据不存在时回退到对话自带凭据」，所以设错也不会把对话锁死。
+#[tauri::command]
+pub fn agent_v1_set_llm_credential(
+    app: AppHandle,
+    request: serde_json::Value,
+) -> Result<serde_json::Value, IpcError> {
+    let path = workspace_database_path(&app)?;
+    let credential_id = request["credentialId"].as_str().unwrap_or_default();
+    crate::application::app_settings::set_setting(
+        &path,
+        crate::application::app_settings::KEY_DEFAULT_LLM_CREDENTIAL,
+        credential_id,
+    )
+    .map_err(|_| IpcError::task_failed())?;
+    Ok(serde_json::json!({ "ok": true }))
+}

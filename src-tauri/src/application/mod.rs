@@ -3,6 +3,7 @@ pub mod account_scheduler;
 pub mod agent_runtime;
 pub mod agent_service;
 pub mod analysis;
+pub mod app_settings;
 pub mod apply_script_plan_service;
 pub mod artifact_importer;
 pub mod asset_opener;

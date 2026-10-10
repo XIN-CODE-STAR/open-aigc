@@ -616,11 +616,30 @@ impl AgentService {
             });
         }
 
+        // 「大语言模型」是**应用级**选择：设了它就所有对话都用它（见 app_settings）。
+        // 设置指向的凭据可能已被删除/停用 —— 只有确实存在时才覆盖对话自带的选择，
+        // 否则回退到 `conversation.credential_id`（旧行为，保证老对话不会因此打不开）。
+        let preferred_id = crate::application::app_settings::get_setting(
+            &self.database_path,
+            crate::application::app_settings::KEY_DEFAULT_LLM_CREDENTIAL,
+        );
+        let preferred_exists = match preferred_id.as_deref() {
+            Some(id) => self
+                .with_credential_repository(|repo| Ok(repo.get(id).ok().flatten().is_some()))
+                .unwrap_or(false),
+            None => false,
+        };
+        let credential_id = if preferred_exists {
+            preferred_id.unwrap_or_default()
+        } else {
+            conversation.credential_id.clone()
+        };
+
         let credential = self.with_credential_repository(|repo| {
-            repo.get(&conversation.credential_id)?.ok_or_else(|| {
+            repo.get(&credential_id)?.ok_or_else(|| {
                 AppError::from(
                     crate::ports::credential_repository::CredentialRepositoryError::NotFound(
-                        conversation.credential_id.clone(),
+                        credential_id.clone(),
                     ),
                 )
             })

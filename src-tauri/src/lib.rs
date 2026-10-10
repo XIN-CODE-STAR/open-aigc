@@ -42,9 +42,10 @@ use base64::Engine;
 use ipc::agent::{
     agent_v1_analyze_asset, agent_v1_analyze_assets_batch, agent_v1_create_conversation,
     agent_v1_debug_log, agent_v1_delete_conversation, agent_v1_get_conversation,
-    agent_v1_list_conversations, agent_v1_list_invocations, agent_v1_list_messages,
-    agent_v1_read_project_memory, agent_v1_rename_conversation, agent_v1_search_assets_semantic,
-    agent_v1_send_message, agent_v1_set_output_directory,
+    agent_v1_get_llm_credential, agent_v1_list_conversations, agent_v1_list_invocations,
+    agent_v1_list_messages, agent_v1_read_project_memory, agent_v1_rename_conversation,
+    agent_v1_search_assets_semantic, agent_v1_send_message, agent_v1_set_llm_credential,
+    agent_v1_set_output_directory,
 };
 use ipc::assets::{
     asset_v1_delete, asset_v1_get, asset_v1_import, asset_v1_list, asset_v1_open_containing_folder,
@@ -971,6 +972,8 @@ pub fn run() {
             agent_v1_list_messages,
             agent_v1_list_invocations,
             agent_v1_send_message,
+            agent_v1_get_llm_credential,
+            agent_v1_set_llm_credential,
             agent_v1_set_output_directory,
             agent_v1_read_project_memory,
             agent_v1_debug_log,

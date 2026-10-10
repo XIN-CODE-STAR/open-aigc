@@ -12,6 +12,9 @@ import AccountConnectDialog from "../components/AccountConnectDialog.vue";
 import CredentialFormDialog from "../components/CredentialFormDialog.vue";
 import { useCredentials } from "../composables/useCredentials";
 import { useResourceAccounts } from "../composables/useResourceAccounts";
+import { getLlmCredential, setLlmCredential } from "../../../bridge/agent";
+// 生成来源能力表（判定哪些 provider 是生成模型，从而把「大语言模型」挑出来）。
+import { generationMediaKinds } from "../../generations/generationSources";
 
 const toast = useToast();
 const { credentials, loading, error, saving, refresh, add, edit, remove } = useCredentials();
@@ -60,9 +63,51 @@ const editingAccount = ref<ResourceAccountRecord | null>(null);
 const deletingId = ref<string | null>(null);
 const deletingAccountId = ref<string | null>(null);
 
+/** 「大语言模型」的应用级选择：作用于当前应用的所有对话。 */
+const llmCredentialId = ref("");
+const llmBusy = ref(false);
+const llmError = ref("");
+
+/**
+ * 可当大语言模型用的凭据：**排除生成类 provider**（kling / seedance / 即梦 / grok …）。
+ * 判定复用 `generationSources` 的能力表，避免在这里另立一份 provider 清单。
+ */
+const llmOptions = computed(() =>
+  credentials.value
+    .filter((credential) => generationMediaKinds(credential).length === 0)
+    .map((credential) => ({
+      id: credential.id,
+      label: `${credential.displayName || credential.providerName} · ${credential.modelName}`,
+    })),
+);
+
+async function loadLlmCredential(): Promise<void> {
+  try {
+    llmCredentialId.value = (await getLlmCredential()) ?? "";
+  } catch {
+    llmCredentialId.value = "";
+  }
+}
+
+async function onSelectLlm(event: Event): Promise<void> {
+  const id = (event.target as HTMLSelectElement).value;
+  llmBusy.value = true;
+  llmError.value = "";
+  try {
+    await setLlmCredential(id || null);
+    llmCredentialId.value = id;
+    toast.info("已设为大语言模型，当前应用的所有对话将使用它。");
+  } catch {
+    llmError.value = "保存失败，请重试。";
+  } finally {
+    llmBusy.value = false;
+  }
+}
+
 onMounted(() => {
   void refresh();
   void refreshAccounts();
+  void loadLlmCredential();
 });
 
 function openAddDialog(): void {
@@ -253,6 +298,30 @@ function formatDate(iso: string): string {
         <span>连接AI账号</span>
       </button>
     </header>
+
+    <!-- 大语言模型：应用级选择，作用于当前应用的所有对话 -->
+    <section class="llm-section">
+      <h3 class="section-title">大语言模型（对话 / 规划）</h3>
+      <p class="section-description">
+        选择后，当前应用的<strong>所有对话</strong>都使用这个模型。不选则各对话沿用创建时各自选择的模型。
+      </p>
+      <div class="llm-row">
+        <select
+          class="llm-select"
+          :value="llmCredentialId"
+          :disabled="llmBusy || llmOptions.length === 0"
+          @change="onSelectLlm"
+        >
+          <option value="">
+            {{ llmOptions.length === 0 ? "没有可用的大语言模型凭据" : "各对话各自选择（不统一）" }}
+          </option>
+          <option v-for="option in llmOptions" :key="option.id" :value="option.id">
+            {{ option.label }}
+          </option>
+        </select>
+        <span v-if="llmError" class="llm-error">{{ llmError }}</span>
+      </div>
+    </section>
 
     <div v-if="loading" class="state-block">
       <LoaderCircle class="is-spinning" :size="20" />
@@ -701,6 +770,49 @@ function formatDate(iso: string): string {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--text-footnote);
+}
+
+/* 大语言模型（应用级选择，作用于所有对话） */
+.llm-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+
+.llm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.llm-select {
+  flex: 1;
+  max-width: 420px;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-subhead);
+  outline: none;
+}
+
+.llm-select:focus {
+  border-color: var(--color-accent);
+}
+
+.llm-select:disabled {
+  opacity: 0.6;
+}
+
+.llm-error {
+  color: var(--color-danger);
+  font-size: var(--text-caption);
 }
 
 .state-block--compact {

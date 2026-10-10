@@ -407,6 +407,31 @@ export async function setOutputDirectory(path: string | null): Promise<void> {
 }
 
 /**
+ * 读取「大语言模型」的应用级选择——**作用于当前应用的所有对话**。
+ * 未设置时返回 null（此时各对话用各自创建时的凭据）。
+ */
+export async function getLlmCredential(): Promise<string | null> {
+  const result = await invokeNative(
+    "agent_v1_get_llm_credential",
+    z.object({ credentialId: z.string().nullable() }),
+  );
+  return result.credentialId;
+}
+
+/**
+ * 设置「大语言模型」——**所有对话**都改用它。传 null 或空串 = 清除该设置，
+ * 回退到各对话自带的凭据。
+ *
+ * 后端不做凭据存在性校验：解析时若发现它指向的凭据不存在，会自动回退，
+ * 所以设错也不会把对话锁死。
+ */
+export async function setLlmCredential(credentialId: string | null): Promise<void> {
+  await invokeNative("agent_v1_set_llm_credential", z.object({ ok: z.boolean() }), {
+    request: { credentialId: credentialId ?? "" },
+  });
+}
+
+/**
  * 读取工作目录的项目记忆（`.openaigc/AIGC.md`）。
  * 缺失或读取失败时返回 null（记忆注入是尽力而为的增强）。
  */

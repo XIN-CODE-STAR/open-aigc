@@ -44,6 +44,8 @@ fn main() {
             "agent_v1_rename_conversation",
             "agent_v1_list_messages",
             "agent_v1_list_invocations",
+            "agent_v1_get_llm_credential",
+            "agent_v1_set_llm_credential",
             "agent_v1_send_message",
             "agent_v1_set_output_directory",
             "agent_v1_read_project_memory",
