@@ -6,6 +6,7 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import type { ResourceAccountRecord } from "../../../bridge/resourceAccounts";
 import ModalDialog from "../../../shared/ui/ModalDialog.vue";
+import { JIMENG_POOL_CONSOLE_URL, JIMENG_POOL_PING_URL } from "../jimengPoolConsole";
 
 const props = defineProps<{
   open: boolean;
@@ -97,13 +98,17 @@ function openLoginPage(): void {
 
 /**
  * 打开即梦账号池管理（内嵌 Webview 窗口，承载 jimeng-free-api 的
- * 账号池管理页）：多账号 Cookie 添加/启停/轮询/失败冷却与状态刷新
+ * 账号池管理控制台）：多账号 Cookie 添加/启停/轮询/失败冷却与状态刷新
  * 都在这个页面完成，无需单独开浏览器。代理未运行时回退系统浏览器。
+ *
+ * ⚠️ 地址必须是**根路径**：`/account-pool/` 是账号池的 **API 前缀**，未登录时
+ * 返回 `{"error":"未登录"}`（401 + application/json）——把它当页面开，
+ * 用户只会看到那句 JSON，永远到不了控制台的初始化/登录表单（2026-10-10 修复）。
  */
 async function openPoolManager(): Promise<void> {
-  const poolUrl = "http://127.0.0.1:5100/account-pool/";
+  const poolUrl = JIMENG_POOL_CONSOLE_URL;
   try {
-    const probe = await fetch("http://127.0.0.1:5100/ping", {
+    const probe = await fetch(JIMENG_POOL_PING_URL, {
       signal: AbortSignal.timeout(3000),
     });
     if (!probe.ok) throw new Error(`HTTP ${probe.status}`);
@@ -241,6 +246,9 @@ function handleClose(): void {
             账号池管理（多账号轮询）↗
           </button>
         </div>
+        <p class="field__help">
+          账号池控制台需要登录：首次使用时在控制台里初始化管理员账号；已初始化则用当时的用户名与密码。
+        </p>
       </div>
 
       <div class="security-note">
