@@ -21,6 +21,7 @@ import { memoryV1Status } from "../../../bridge/memory";
 import { useToast } from "../../../shared/ui/useToast";
 import { useGenerationHistory } from "../composables/useGenerationHistory";
 import { useAgentConversation } from "../composables/useAgentConversation";
+import { isGenerationNodeTool } from "../generationNodeTools";
 import { useRoute, useRouter } from "vue-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
@@ -682,8 +683,14 @@ watch(
         memoryCanvasRef.value?.refreshNodes();
       }
 
+      // 只有生成类工具才需要在画布上建 pending 节点；画布工具的节点由后端直写、
+      // 成功后走上面的 refreshNodes()。此前此处无筛选：画布工具一进 running 就会
+      // 凭空造出「摘要=工具名」的幻影 image 节点（2026-10-01 0338e63 引入）。
+      // 判定与回归测试见 ../generationNodeTools.ts。
+      const isGenerationTool = isGenerationNodeTool(inv.toolName);
+
       // 当任务开始执行时，添加 pending 节点
-      if (inv.status === "running" && prev !== "running") {
+      if (isGenerationTool && inv.status === "running" && prev !== "running") {
         const prompt: string = inv.argumentsJson
           ? (() => {
               try {
@@ -699,7 +706,12 @@ watch(
       }
 
       // 当任务成功时，更新状态并连线到上传节点
-      if (inv.status === "succeeded" && prev !== "succeeded" && inv.resultJson) {
+      if (
+        isGenerationTool &&
+        inv.status === "succeeded" &&
+        prev !== "succeeded" &&
+        inv.resultJson
+      ) {
         // 更新节点状态
         const nodeId = invocationNodeIds.value.get(inv.id);
         if (nodeId) {
@@ -742,7 +754,7 @@ watch(
       }
 
       // 当任务失败时，更新节点状态
-      if (inv.status === "failed" && prev !== "failed") {
+      if (isGenerationTool && inv.status === "failed" && prev !== "failed") {
         const nodeId = invocationNodeIds.value.get(inv.id);
         if (nodeId) {
           memoryCanvasRef.value?.setNodeStatus(nodeId, "failed");

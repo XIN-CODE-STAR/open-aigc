@@ -668,6 +668,10 @@ pub fn ensure_canvas(workspace_path: &Path, conversation_id: &str) -> Option<Str
 }
 
 /// Agent 在画布上创建一个便签节点，返回节点 ID。
+///
+/// 与 [`add_canvas_image`] 一致：**同一画布上已有相同文字的便签时直接复用**，
+/// 不重复创建。自驱动循环里同一条便签可能被反复提交（模型在多轮之间重复输出
+/// 同一个结论），不去重会让画布被内容完全相同的便签堆满。
 pub fn add_canvas_note(
     workspace_path: &Path,
     conversation_id: &str,
@@ -678,6 +682,21 @@ pub fn add_canvas_note(
     let repo = open_repo(workspace_path)?;
     let canvas_id = ensure_canvas(workspace_path, conversation_id)?;
     let nodes = repo.list_nodes(&canvas_id).ok().unwrap_or_default();
+
+    // 去重：同一画布上已有相同文字的便签就复用，**与坐标无关**——显式坐标只对
+    // 新节点的落位有意义，移动既有节点是 canvas_update_node 的职责。若按坐标
+    // 网开一面，自驱动循环里「同一条结论 + 模型随手补的坐标」仍会堆出重复便签，
+    // 那正是本次要修的问题；这也与 [`add_canvas_image`] 按 imageUrl 复用、
+    // 不看坐标的行为一致。
+    // 文字按 trim 后比较：LLM 的重复输出常带尾随换行，不能让空白差异绕过去重。
+    let wanted = text.trim();
+    if let Some(existing) = nodes
+        .iter()
+        .find(|n| n.node_type == "note" && payload_str(n, "text").as_deref().map(str::trim) == Some(wanted))
+    {
+        return Some(existing.id.clone());
+    }
+
     // 未指定坐标时智能落位，避免与现有节点重叠
     let (flow_x, flow_y) = match (flow_x, flow_y) {
         (Some(x), Some(y)) => (x, y),
@@ -1845,6 +1864,87 @@ mod tests {
         let hits = search_nodes(dir.path(), "test", "二维码", 3);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, note.id);
+    }
+
+    /// 自驱动循环会把同一条结论反复提交：同文字便签必须复用，不能堆重复节点。
+    #[test]
+    fn add_canvas_note_reuses_identical_note() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join(DB_FILE);
+        let _canvas_id = seed_canvas(&db, "conv-test");
+
+        let first = add_canvas_note(dir.path(), "test", None, None, "项目主线是暗色调科技感")
+            .expect("first note");
+        let second = add_canvas_note(dir.path(), "test", None, None, "项目主线是暗色调科技感")
+            .expect("second note");
+
+        assert_eq!(first, second, "重复提交同一条便签时应复用既有节点");
+
+        let repo = SqliteMemoryCanvasRepository::open(&db).unwrap();
+        let canvas_id = find_canvas_id(&repo, "test").unwrap();
+        let notes = repo
+            .list_nodes(&canvas_id)
+            .unwrap()
+            .into_iter()
+            .filter(|n| n.node_type == "note")
+            .count();
+        assert_eq!(notes, 1, "画布上不应出现内容相同的重复便签");
+    }
+
+    /// 反向对照：不同文字必须各自创建，去重不能吃掉真实的新便签。
+    #[test]
+    fn add_canvas_note_creates_distinct_note_for_new_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join(DB_FILE);
+        let _canvas_id = seed_canvas(&db, "conv-test");
+
+        let a = add_canvas_note(dir.path(), "test", None, None, "结论一：主色为暗色")
+            .expect("note a");
+        let b =
+            add_canvas_note(dir.path(), "test", None, None, "结论二：强调色用青色").expect("note b");
+
+        assert_ne!(a, b, "不同文字必须创建不同节点");
+
+        let repo = SqliteMemoryCanvasRepository::open(&db).unwrap();
+        let canvas_id = find_canvas_id(&repo, "test").unwrap();
+        let notes = repo
+            .list_nodes(&canvas_id)
+            .unwrap()
+            .into_iter()
+            .filter(|n| n.node_type == "note")
+            .count();
+        assert_eq!(notes, 2, "两条不同便签都应保留");
+    }
+
+    /// 模型重复提交时常会随手补上坐标或尾随换行：这两者都不应绕过去重，
+    /// 否则堆叠问题只是换了个入口回来。
+    #[test]
+    fn add_canvas_note_reuses_identical_note_despite_coordinates_and_whitespace() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join(DB_FILE);
+        let _canvas_id = seed_canvas(&db, "conv-test");
+
+        let first = add_canvas_note(dir.path(), "test", None, None, "项目主线是暗色调科技感")
+            .expect("first note");
+        let with_coords =
+            add_canvas_note(dir.path(), "test", Some(480.0), Some(260.0), "项目主线是暗色调科技感")
+                .expect("second note");
+        let with_newline =
+            add_canvas_note(dir.path(), "test", None, None, "项目主线是暗色调科技感\n")
+                .expect("third note");
+
+        assert_eq!(first, with_coords, "带显式坐标的重复便签也应复用既有节点");
+        assert_eq!(first, with_newline, "仅尾随换行不同也应复用既有节点");
+
+        let repo = SqliteMemoryCanvasRepository::open(&db).unwrap();
+        let canvas_id = find_canvas_id(&repo, "test").unwrap();
+        let notes = repo
+            .list_nodes(&canvas_id)
+            .unwrap()
+            .into_iter()
+            .filter(|n| n.node_type == "note")
+            .count();
+        assert_eq!(notes, 1, "画布上不应出现内容相同的重复便签");
     }
 
     #[test]
