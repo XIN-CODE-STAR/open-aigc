@@ -40,6 +40,61 @@ pnpm lint
 pnpm format
 ```
 
+## 故障取证与诊断日志
+
+Agent 运行失败在界面上往往只表现为「执行计划某一步变红」，**没有可读的错误**。排查必须直接读数据，顺序如下。
+
+**1. 诊断日志（唯一的可信错误出口）**
+
+```
+%LOCALAPPDATA%\com.aigcstudio.desktop\workspace\agent-diagnostics.log
+```
+
+由 `src-tauri/src/application/diagnostics.rs` 写入，启动时在 `lib.rs` 的 setup 中初始化。已接线的 scope：
+
+| scope | 触发点 |
+|---|---|
+| `agent.step` | 计划步骤失败 |
+| `agent.tool` | 工具执行失败 |
+| `agent.llm` | LLM 远程错误或其它 LLM 错误 |
+| `agent.dedup` | 跳过重复的 assistant 消息 |
+
+新增失败路径时，**必须**用 `diag_fail!` 记录，而不要只写 `eprintln!`：
+
+```rust
+crate::diag_fail!("agent.step", "plan step {} failed (conv={conversation_id}): {e}", step.index);
+```
+
+> **为什么不能只靠 stderr**：Tauri CLI 派生的进程，其 stderr **不会**落盘到
+> `.workbuddy-ai/dev-launch.log`。在本环境下 `eprintln!` 等于不写——
+> 凡是要事后追查的失败，都必须落盘。诊断自身的 IO 错误一律吞掉，绝不影响业务。
+
+**2. 先判断「工具到底有没有被调用」**
+
+```sql
+select count(*) from agent_tool_invocations where conversation_id = '<conv>';
+```
+
+| 观察 | 结论 | 去看哪里 |
+|---|---|---|
+| **0 条** | 失败发生在**调用工具之前** | LLM 响应构造、消息校验 |
+| ≥1 条且 `status='failed'` | 工具自身失败 | `error_message` 列 |
+| 有 `succeeded` 但载荷 `ok:false` | 工具跑了，返回软失败 | 工具自己的 payload |
+
+> **判例：「某步 Failed」不等于「工具失败了」。** 2026-10-08 的画布便签故障中，
+> 步骤是 `failed`，但 `canvas_add_note` **一次都没被调用**——运行更早就中断了。
+> 直接去读工具实现会完全跑偏。
+
+**3. 画布数据只看 `memory_*` 表**
+
+画布有两套仓储并存：`memory_nodes`/`memory_canvases`（**界面实际读取**，经
+`MemoryCanvasPanel.vue` → `bridge/memoryCanvas.ts` → `memory_canvas_v1_*`）与
+`canvas_nodes`/`canvas_canvases`（`bridge/canvas.ts` 的 `canvas_v1_*` 目前在 `src/` 下
+**没有调用方**）。Agent 工具写的是 **memory** 那套——查 `canvas_nodes` 会在健康系统上
+看到 0 行，从而走向错误结论。
+
+完整的取证与修复记录见 `docs/handoff/agent-error-forensics-2026-10-08.md`。
+
 ## 前端职责
 
 | 路径 | 职责 |
