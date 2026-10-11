@@ -2,7 +2,8 @@
 /**
  * AppSidebar：左侧导航栏。
  *
- * 布局：品牌头 → 分组导航（工作区/资源）→ 新建对话 → 历史对话 → 底部状态。
+ * 布局：品牌头 → 分组导航（工作区/资源）→ 新建对话 → 底部状态。
+ * 历史对话不再挂在侧栏，已集中到「任务」页查看（见 modules/tasks）。
  * 默认 68px 图标窄轨，钉住展开为完整面板（preferences.navigationExpanded）。
  */
 import { computed } from "vue";
@@ -12,6 +13,7 @@ import {
   Bot,
   HardDrive,
   Images,
+  ListTodo,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -22,7 +24,6 @@ import {
 import { RouterLink } from "vue-router";
 
 import appIconUrl from "../../../assets/app-icon.svg";
-import ConversationHistoryPanel from "./ConversationHistoryPanel.vue";
 import { usePreferencesStore } from "../stores/preferences";
 import { useProjectDirectory } from "../stores/projectDirectory";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -38,6 +39,7 @@ const navGroups = [
     label: "工作区",
     items: [
       { path: "/generations", label: "创意工坊", icon: Sparkles },
+      { path: "/tasks", label: "任务", icon: ListTodo },
       { path: "/assets", label: "资产库", icon: Images },
       { path: "/prompts", label: "提示词库", icon: BookOpenText },
     ],
@@ -109,8 +111,6 @@ const localStatus = computed(() => {
         <span>新建对话</span>
       </RouterLink>
     </div>
-
-    <ConversationHistoryPanel v-if="expanded" />
 
     <div class="sidebar__footer">
       <div class="local-status" :title="expanded ? undefined : localStatus">
@@ -191,12 +191,13 @@ const localStatus = computed(() => {
 }
 
 /* —— 分组导航 —— */
+/* 历史面板移出侧栏后，由导航自身撑满剩余高度，把底部状态条压到底。 */
 .sidebar__nav {
   display: flex;
-  flex: 0 0 auto;
-  padding: var(--space-2) var(--space-2) 0;
+  flex: 1 1 auto;
+  padding: var(--space-3) var(--space-2) 0;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-5);
   overflow: visible;
 }
 
@@ -206,16 +207,18 @@ const localStatus = computed(() => {
   gap: 1px;
 }
 
+/* Marvis 眉标：等宽 + 全大写 + 正字距 + 板岩色 */
 .nav-group__title {
-  height: 20px;
-  margin: 0 0 2px;
+  height: 18px;
+  margin: 0 0 var(--space-1);
   padding: 0 var(--space-2);
   overflow: hidden;
-  color: var(--color-text-tertiary);
-  font-size: 10px;
-  font-weight: var(--font-weight-medium);
-  line-height: 20px;
-  letter-spacing: 0.06em;
+  color: var(--color-accent-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -251,10 +254,10 @@ const localStatus = computed(() => {
   flex: 0 0 17px;
 }
 
-/* 激活态：低饱和选中面 + 左侧品牌指示条 */
+/* 激活态：Marvis 用 accent-soft 着色选中行 + 左侧板岩指示条 */
 .nav-item.router-link-active {
   color: var(--color-text);
-  background: var(--color-surface-hover);
+  background: var(--color-accent-soft);
   font-weight: var(--font-weight-medium);
 }
 
@@ -269,7 +272,7 @@ const localStatus = computed(() => {
   background: var(--color-accent);
 }
 
-/* —— 新建对话 —— */
+/* —— 新建对话（Marvis：主操作是药丸） —— */
 .sidebar__action {
   display: flex;
   flex: 0 0 auto;
@@ -279,31 +282,29 @@ const localStatus = computed(() => {
 .new-conversation-btn {
   display: flex;
   width: 100%;
-  height: 34px;
-  padding: 0 var(--space-2);
+  height: 36px;
+  padding: 0 var(--space-4);
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
   color: var(--color-on-accent);
   border: none;
-  border-radius: var(--radius-control);
-  background: linear-gradient(135deg, var(--color-accent), var(--aurora-cyan));
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  font-family: var(--font-sans);
   font-size: var(--text-subhead);
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
   cursor: pointer;
-  transition:
-    opacity var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast) var(--ease-out);
 }
 
 .new-conversation-btn:hover {
-  opacity: 0.92;
-  box-shadow: 0 2px 10px var(--aurora-glow-1);
+  background: var(--color-accent-hover);
 }
 
 .new-conversation-btn:active {
-  opacity: 0.82;
+  background: var(--color-accent-pressed);
 }
 
 .new-conversation-btn svg {
@@ -343,7 +344,7 @@ const localStatus = computed(() => {
   text-overflow: ellipsis;
 }
 
-/* —— 通用图标按钮 —— */
+/* —— 通用图标按钮（Marvis ICON_BTN：圆形幽灵按钮） —— */
 .icon-button {
   display: inline-grid;
   height: 30px;
@@ -352,7 +353,7 @@ const localStatus = computed(() => {
   place-items: center;
   color: var(--color-text-secondary);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-pill);
   background: transparent;
   cursor: pointer;
   text-decoration: none;
@@ -363,7 +364,7 @@ const localStatus = computed(() => {
 
 .icon-button:hover {
   color: var(--color-text);
-  background: var(--color-surface-hover);
+  background: var(--color-fg-soft);
 }
 
 .sidebar__settings.router-link-active {

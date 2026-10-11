@@ -5,6 +5,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   AGENT_EVENT_CHANNEL,
   AgentCommandError,
+  clearConversation as clearConversationIpc,
   createConversation as createConversationIpc,
   deleteConversation as deleteConversationIpc,
   getConversation as getConversationIpc,
@@ -68,7 +69,19 @@ export function useAgentConversation() {
   const currentConversation = ref<ConversationRecord | null>(null);
   const messages = ref<MessageRecord[]>([]);
   const invocations = ref<ToolInvocationRecord[]>([]);
-  const isSending = ref(false);
+  /**
+   * 正在发送的会话 id（null 表示空闲）。
+   *
+   * 刻意用「会话 id」而不是全局布尔：否则在 A 会话发送中切到 B，
+   * B 会被误判为「正在处理」，A 的旧请求返回时还会把状态写进 B。
+   */
+  const sendingConversationId = ref<string | null>(null);
+  /** 当前会话是否正在发送（按会话归属判定，切换会话后不会串味）。 */
+  const isSending = computed(
+    () =>
+      sendingConversationId.value !== null &&
+      sendingConversationId.value === currentConversation.value?.id,
+  );
   const errorMessage = ref<string | undefined>(undefined);
   const conversationWorkspaces = useConversationWorkspaces();
   const projectDir = useProjectDirectory();
@@ -97,6 +110,16 @@ export function useAgentConversation() {
   let lastSentContent: string | null = null;
   /** 最近一次发送所在的会话 id，重试时校验会话未被切换。 */
   let lastSentConversationId: string | null = null;
+
+  /**
+   * 生成任务 id → 发起它的会话 id。
+   *
+   * 异步生成（图片/视频）完成事件 `generation://completed` 的载荷**不含会话信息**，
+   * 若直接写入「当前正在看的会话」，就会出现「新建/切换对话后，晚到的生成结果
+   * 落进另一段对话」。这里在收到工具调用更新（其 `generationTaskId` 在提交时即写入）
+   * 时登记归属，完成事件据此精确回填到原会话。
+   */
+  const generationTaskOwners = new Map<string, string>();
 
   let unlisten: UnlistenFn | null = null;
   let listRequest = 0;
@@ -203,6 +226,18 @@ export function useAgentConversation() {
       }
     }
     return null;
+  }
+
+  /**
+   * 登记生成任务的归属会话。
+   *
+   * 注意：这里**先于** `handleEvent` 的会话过滤执行——即使当前正在看别的会话，
+   * 也要把归属记下来，否则切回来时无法判断某个完成事件是否属于本会话。
+   */
+  function rememberGenerationOwner(event: AgentEvent): void {
+    if (event.kind === "toolInvocationUpdated" && event.invocation.generationTaskId) {
+      generationTaskOwners.set(event.invocation.generationTaskId, event.conversationId);
+    }
   }
 
   function handleEvent(event: AgentEvent): void {
@@ -315,6 +350,7 @@ export function useAgentConversation() {
         }
         const parsed = parseAgentEvent(event.payload);
         if (parsed) {
+          rememberGenerationOwner(parsed);
           handleEvent(parsed);
         } else {
           // 诊断日志：事件契约不匹配导致静默丢弃，输出 payload 预览便于排查。
@@ -343,12 +379,21 @@ export function useAgentConversation() {
         taskId: string;
         resultUrl?: string;
       }>("generation://completed", (event) => {
-        const { resultUrl } = event.payload;
-        if (!resultUrl || !currentConversation.value) return;
+        const { resultUrl, taskId } = event.payload;
+        const active = currentConversation.value;
+        if (!resultUrl || !active) return;
+        // 只回填到发起该生成的会话：晚到的结果绝不写进另一段对话。
+        const owner = generationTaskOwners.get(taskId);
+        if (owner !== active.id) {
+          debugLog(
+            `[GenerationEvent] drop result task=${taskId} owner=${owner ?? "unknown"} current=${active.id}`,
+          );
+          return;
+        }
         // 把生成结果作为 assistant 消息注入聊天
         const resultMessage: MessageRecord = {
           id: `gen-result-${event.payload.attemptId}`,
-          conversationId: currentConversation.value.id,
+          conversationId: active.id,
           role: "assistant",
           content: `✅ 图片已生成！
 
@@ -442,14 +487,8 @@ export function useAgentConversation() {
 
   async function selectConversation(conversation: ConversationRecord): Promise<void> {
     currentConversation.value = conversation;
-    messages.value = [];
-    invocations.value = [];
-    expandedInvocations.value = new Set();
-    // 执行计划是实时态，不跨会话保留；切换会话时清空，避免显示上一会话的计划。
-    currentPlan.value = null;
-    planRoundMessageId.value = null;
-    lastSentContent = null;
-    lastSentConversationId = null;
+    // 执行计划、流式文本等都是实时态，不跨会话保留，避免上一会话的残留串进新会话。
+    resetConversationView();
     clearError();
     try {
       const [msgRecords, invRecords] = await Promise.all([
@@ -516,17 +555,57 @@ export function useAgentConversation() {
     }
   }
 
-  function clearCurrentConversation(): void {
-    clearError();
-    currentConversation.value = null;
+  /**
+   * 重置「当前会话视图」的全部派生状态。
+   *
+   * 必须包含流式文本与循环阶段：否则 A 会话正在流式输出时切到 B，
+   * 那段气泡会残留在 B 里（另一条「串到新对话」的路径）。
+   */
+  function resetConversationView(): void {
     messages.value = [];
     invocations.value = [];
     expandedInvocations.value = new Set();
     currentPlan.value = null;
     planRoundMessageId.value = null;
-    isSending.value = false;
+    pendingQuestion.value = null;
+    recalledMemories.value = [];
+    streamingContent.value = "";
+    isStreaming.value = false;
     lastSentContent = null;
     lastSentConversationId = null;
+  }
+
+  /**
+   * 清空当前会话，回到欢迎页。
+   *
+   * 只清除本地视图状态，**不创建**任何会话记录——这正是「清空对话」与
+   * 「新建对话」的区别：清空绝不能走新建动作，否则历史里会凭空多出一条空对话。
+   */
+  function clearCurrentConversation(): void {
+    clearError();
+    currentConversation.value = null;
+    resetConversationView();
+  }
+
+  /**
+   * 清空当前会话的消息记录（**保留会话本身**）。
+   *
+   * 成功后本地视图一并重置，但 `currentConversation` 保持不变——用户留在同一个
+   * 会话里继续聊，而不是被丢进一条新会话。这正是「清空对话」与「新建对话」的分野：
+   * 清空不得走新建动作，否则历史里会凭空多出一条空会话。
+   */
+  async function clearConversation(): Promise<boolean> {
+    const conversation = currentConversation.value;
+    if (!conversation) return false;
+    clearError();
+    try {
+      await clearConversationIpc(conversation.id);
+      resetConversationView();
+      return true;
+    } catch (error) {
+      setError(error);
+      return false;
+    }
   }
 
   async function sendMessage(
@@ -543,7 +622,8 @@ export function useAgentConversation() {
       return;
     }
     clearError();
-    isSending.value = true;
+    const conversationId = currentConversation.value.id;
+    sendingConversationId.value = conversationId;
     streamingContent.value = "";
     isStreaming.value = false;
     // 新一轮对话开始时清空上一轮的执行计划，避免旧计划面板残留在新消息下方；
@@ -551,8 +631,7 @@ export function useAgentConversation() {
     currentPlan.value = null;
     planRoundMessageId.value = null;
     lastSentContent = content;
-    lastSentConversationId = currentConversation.value.id;
-    const conversationId = currentConversation.value.id;
+    lastSentConversationId = conversationId;
     try {
       await sendMessageIpc(
         conversationId,
@@ -573,7 +652,10 @@ export function useAgentConversation() {
     } catch (error) {
       setError(error);
     } finally {
-      isSending.value = false;
+      // 只有仍是本会话在发送时才清除，避免把其它会话的在途状态一并清掉。
+      if (sendingConversationId.value === conversationId) {
+        sendingConversationId.value = null;
+      }
     }
   }
 
@@ -625,6 +707,7 @@ export function useAgentConversation() {
     createConversation,
     deleteConversation,
     clearCurrentConversation,
+    clearConversation,
     sendMessage,
     retryLastSend,
     toggleInvocation,

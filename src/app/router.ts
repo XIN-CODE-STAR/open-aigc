@@ -1,5 +1,5 @@
 import type { RouteRecordRaw } from "vue-router";
-import { Inbox, ListTodo } from "@lucide/vue";
+import { Inbox } from "@lucide/vue";
 import { createRouter, createWebHashHistory } from "vue-router";
 
 // Lazy-loaded page components for code splitting
@@ -10,11 +10,12 @@ const SettingsPage = () => import("../modules/settings/pages/SettingsPage.vue");
 const BackupPage = () => import("../modules/backup/pages/BackupPage.vue");
 const PluginsPage = () => import("../modules/plugins/pages/PluginsPage.vue");
 const ModelsPage = () => import("../modules/models/pages/ModelsPage.vue");
+const TasksPage = () => import("../modules/tasks/pages/TasksPage.vue");
 const ModuleLandingPage = () => import("./pages/ModuleLandingPage.vue");
 
 // OPEN AIGC 仅保留 Agent 创作相关功能：
-// 创意工坊（/generations）为默认工作区，资源库、提示词库、备份、设置为独立顶级入口。
-// 登录与管理中心（班级/学生/管理端）已随教学/管理功能一并移除。
+// 创意工坊（/generations）为默认工作区，任务（历史对话）、资源库、提示词库、备份、
+// 设置为独立顶级入口。登录与管理中心（班级/学生/管理端）已随教学/管理功能一并移除。
 
 const routes: RouteRecordRaw[] = [
   {
@@ -53,14 +54,8 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: "/tasks",
-    component: ModuleLandingPage,
-    meta: { title: "任务中心" },
-    props: {
-      description: "后台任务与处理状态",
-      emptyDescription: "生成、导入、下载和导出任务会在这里集中显示。",
-      emptyTitle: "暂无后台任务",
-      icon: ListTodo,
-    },
+    component: TasksPage,
+    meta: { title: "任务" },
   },
   {
     path: "/notifications",

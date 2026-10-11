@@ -12,7 +12,7 @@
  * Phase 1 拆分目标：只通过 props/emit 通信，不直接调 bridge / store。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { FileUp, LoaderCircle, Blocks, Send, Settings2, Sparkles } from "@lucide/vue";
+import { FileUp, LoaderCircle, Blocks, Eraser, Send, Settings2, Sparkles } from "@lucide/vue";
 import type { CredentialRecord } from "../../../bridge/credentials";
 import type { ResourceAccountRecord } from "../../../bridge/resourceAccounts";
 import ComposerModeChips, { type ComposerModeItem } from "./ComposerModeChips.vue";
@@ -46,6 +46,8 @@ const props = defineProps<{
   hasCredentials: boolean;
   /** 是否处于 Agent 模式（用于控制空状态 CTA）。 */
   isAgentMode: boolean;
+  /** 是否存在可清空的当前会话（控制「清空对话」按钮显隐）。 */
+  canClearConversation?: boolean;
   /** 已上传的参考图/附件列表。 */
   referenceImages: { name: string; mimeType: string }[];
   /** 当前是否处于文件拖拽悬停态。 */
@@ -100,6 +102,8 @@ const emit = defineEmits<{
   "prompt-keydown": [event: KeyboardEvent];
   /** Agent 模式下开始新会话（原顶部栏按钮迁移至此）。 */
   "start-new-agent-conversation": [];
+  /** 清空当前会话的消息记录（保留会话本身）。 */
+  "clear-agent-conversation": [];
   /** 切换偏好面板（原顶部栏按钮迁移至此）。 */
   "toggle-preferences": [];
   "select-directory": [];
@@ -240,6 +244,15 @@ onBeforeUnmount(() => {
             @click="emit('start-new-agent-conversation')"
           >
             <Sparkles :size="14" />
+          </button>
+          <button
+            v-if="isAgentMode && canClearConversation"
+            type="button"
+            class="composer-action-btn"
+            title="清空对话（删除本对话的消息记录，保留对话）"
+            @click="emit('clear-agent-conversation')"
+          >
+            <Eraser :size="14" />
           </button>
           <button
             type="button"
@@ -393,20 +406,21 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   background: var(--material-sheet);
   border: 1px solid var(--color-border-subtle);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   padding: 14px;
   pointer-events: auto;
   backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
   -webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
   box-shadow: var(--shadow-lg);
   transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+    border-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
 }
 
+/* 聚焦：Marvis 规范——accent 边框 + focus ring，不做「更深阴影」 */
 .composer-box:focus-within {
-  border-color: var(--color-border);
-  box-shadow: var(--shadow-xl);
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
 }
 
 /* ─── 模式芯片行 ─── */
@@ -419,40 +433,6 @@ onBeforeUnmount(() => {
   padding: 0 0 10px;
 }
 
-.mode-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 30px;
-  padding: 5px 10px;
-  border-radius: var(--radius-control);
-  background: transparent;
-  border: 1px solid var(--color-border-subtle);
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition:
-    background 120ms ease,
-    color 120ms ease,
-    border-color 120ms ease;
-}
-
-.mode-chip:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
-  border-color: var(--color-border);
-}
-
-.mode-chip.is-active {
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-.mode-more {
-  position: relative;
-}
-
 /* ─── 工作台操作按钮（新会话 / 偏好） ─── */
 .composer-actions {
   display: inline-flex;
@@ -461,33 +441,31 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 
+/* Marvis ICON_BTN：圆形幽灵按钮，hover 用 fg-soft 填充 */
 .composer-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
+  border: none;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-tertiary);
   cursor: pointer;
   transition:
-    background 120ms ease,
-    color 120ms ease,
-    border-color 120ms ease;
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
 .composer-action-btn:hover {
-  background: var(--color-surface-hover);
-  border-color: var(--color-border-subtle);
+  background: var(--color-fg-soft);
   color: var(--color-text);
 }
 
 .composer-action-btn.is-active {
-  border-color: var(--color-accent);
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .file-input-hidden {
@@ -498,82 +476,14 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.mode-caret {
-  margin-left: 2px;
-  opacity: 0.7;
-  transition: transform 160ms ease;
-}
-
-.mode-chip.is-open .mode-caret {
-  transform: rotate(180deg);
-}
-
-.mode-menu {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  min-width: 160px;
-  background: var(--material-sheet);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  padding: 4px;
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
-  -webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
-  z-index: 30;
-}
-
-.mode-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 10px;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  color: var(--color-text);
-  font-size: 12px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 120ms ease;
-}
-
-.mode-menu-item:hover {
-  background: var(--color-surface-hover);
-}
-
-.mode-menu-item.is-selected {
-  background: var(--color-surface-selected);
-  color: var(--color-accent);
-}
-
-.mode-menu-check {
-  margin-left: auto;
-  color: var(--color-success);
-}
-
-.menu-enter-active,
-.menu-leave-active {
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
-}
-
-.menu-enter-from,
-.menu-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
-}
-
-/* ─── 大输入框 ─── */
+/* ─── 大输入框（Marvis：内凹输入井 + accent 聚焦边框 + focus ring） ─── */
 .prompt-input {
   display: block;
   width: 100%;
   min-height: 92px;
   max-height: 280px;
   padding: 12px;
-  background: var(--color-surface-subtle);
+  background: var(--color-input-well);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-control);
   color: var(--color-text);
@@ -583,9 +493,9 @@ onBeforeUnmount(() => {
   resize: vertical;
   outline: none;
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+    background var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
 }
 
 .prompt-input::placeholder {
@@ -595,7 +505,7 @@ onBeforeUnmount(() => {
 .prompt-input:focus {
   background: var(--color-surface);
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-soft);
+  box-shadow: var(--focus-ring);
 }
 
 .composer-box.is-dragover {
@@ -640,18 +550,18 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
+  border: none;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-tertiary);
   cursor: pointer;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
 .tool-btn:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-fg-soft);
   color: var(--color-text);
 }
 
@@ -671,7 +581,8 @@ onBeforeUnmount(() => {
   padding: 0 3px;
   border-radius: 7px;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
   line-height: 1;
@@ -685,9 +596,9 @@ onBeforeUnmount(() => {
   height: 24px;
   padding: 0 8px;
   background: var(--color-accent-soft);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-size: 11px;
   font-weight: 500;
   max-width: 140px;
@@ -705,20 +616,22 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: var(--color-accent);
+  color: inherit;
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
 }
 
 .dir-chip__reset:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-fg-soft);
 }
 
+/* 字符计数：Marvis 的数值用等宽 + 表格数字 */
 .char-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
 }
 
 .send-hint {
@@ -726,30 +639,31 @@ onBeforeUnmount(() => {
   color: var(--color-warning);
 }
 
+/* Marvis 主按钮：药丸；hover/active 靠背景加深，不做位移 */
 .send-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border: none;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   background: var(--color-accent);
   color: var(--color-on-accent);
   cursor: pointer;
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+  transition: background var(--duration-fast) var(--ease-out);
 }
 
 .send-btn:hover:not(:disabled) {
-  opacity: 1;
-  transform: translateY(-1px);
   background: var(--color-accent-hover);
 }
 
+.send-btn:active:not(:disabled) {
+  background: var(--color-accent-pressed);
+}
+
 .send-btn:disabled {
-  background: var(--color-surface-hover);
+  background: var(--color-fg-soft);
   color: var(--color-text-disabled);
   cursor: not-allowed;
 }
@@ -763,8 +677,8 @@ onBeforeUnmount(() => {
 .params-enter-active,
 .params-leave-active {
   transition:
-    opacity 160ms ease,
-    max-width 220ms ease;
+    opacity var(--duration-base) var(--ease-out),
+    max-width var(--duration-base) var(--ease-out);
   overflow: hidden;
 }
 
