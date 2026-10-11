@@ -149,14 +149,15 @@ onBeforeUnmount(() => {
 }
 
 .mode-chips__pill:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-fg-soft);
   color: var(--color-text);
 }
 
+/* Marvis 选中态：accent-soft 着色 + 板岩文字，不加边框 */
 .mode-chips__pill.is-active {
-  border-color: var(--color-accent);
+  border-color: transparent;
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .mode-chips__caret {
@@ -182,9 +183,11 @@ onBeforeUnmount(() => {
   min-width: 150px;
   padding: 4px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  background: var(--color-surface);
+  border-radius: var(--radius-control);
+  background: var(--material-sheet);
   box-shadow: var(--shadow-menu);
+  backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+  -webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
   z-index: var(--z-dropdown);
 }
 
@@ -209,18 +212,18 @@ onBeforeUnmount(() => {
 
 .mode-chips__menu-item:hover {
   color: var(--color-text);
-  background: var(--color-surface-hover);
+  background: var(--color-fg-soft);
 }
 
 .mode-chips__menu-item.is-active {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   background: var(--color-accent-soft);
 }
 
 .mode-chips-enter-active,
 .mode-chips-leave-active {
   transition:
-    opacity var(--duration-fast) ease,
+    opacity var(--duration-fast) var(--ease-out),
     transform var(--duration-fast) var(--ease-out);
 }
 

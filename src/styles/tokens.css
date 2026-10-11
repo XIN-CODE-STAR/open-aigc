@@ -1,66 +1,82 @@
 /*
- * AIGC Studio 设计令牌 — Aurora 主题
+ * OPEN AIGC 设计令牌 — 对齐 Marvis 设计系统
+ * （参考 marvis-ai/marvis · apps/native/DESIGN.md）
  *
- * 美学方向：深蓝石板基底 + 紫青极光辉光。
- * 与 iOS HIG 保持结构一致（8pt grid、字号梯度、圆角），
- * 但色彩体系从 iOS Blue 转向 Aurora Violet/Cyan，
- * 为创意工坊营造"光存在于空间中"的氛围感。
+ * 三条规范是全局约束，改令牌前请先读：
+ *  1. One hue —— 暖中性色承担整个界面，深板岩 #3a7294 是唯一的饱和色，
+ *     它只标记一件事：这是主操作，或「它活着」（监听/流式/聚焦）。
+ *  2. 发丝线做分隔 —— 1px 边框或 fg 5–12% 混合。不要粗规则线，不要灰盒子套灰盒子。
+ *  3. 悬停改背景，绝不把前景色往 muted 淡化；阴影深而柔，从不生硬。
+ *
+ * 颜色用 OKLch 表达；派生变体一律用 color-mix，不要手挑 hex。
  */
 
 :root {
   color-scheme: light;
 
-  /* —— 色彩 · 亮色主题 —— */
-  --color-canvas: #f2f2f7;
-  --color-surface: #ffffff;
-  --color-surface-subtle: #f9f9f9;
-  --color-surface-hover: rgba(60, 60, 67, 0.08);
-  --color-surface-selected: rgba(139, 92, 246, 0.12);
+  /* —— 色彩 · 亮色 · 暖白基底 —— */
+  --color-canvas: oklch(0.968 0.003 95);
+  --color-surface: oklch(1 0 0);
+  --color-surface-subtle: oklch(0.975 0.003 95);
+  --color-surface-hover: color-mix(in oklab, oklch(0.148 0.004 228.8) 6%, transparent);
+  --color-surface-selected: color-mix(in oklab, #3a7294 14%, transparent);
 
-  --color-border: rgba(60, 60, 67, 0.18);
-  --color-border-subtle: rgba(60, 60, 67, 0.08);
-  --color-border-strong: rgba(60, 60, 67, 0.29);
+  /* 发丝线 */
+  --color-border: color-mix(in oklab, oklch(0.148 0.004 228.8) 15%, transparent);
+  --color-border-subtle: color-mix(in oklab, oklch(0.148 0.004 228.8) 8%, transparent);
+  --color-border-strong: color-mix(in oklab, oklch(0.148 0.004 228.8) 30%, transparent);
 
-  --color-text: #1c1c1e;
-  --color-text-secondary: rgba(60, 60, 67, 0.6);
-  --color-text-tertiary: rgba(60, 60, 67, 0.3);
-  --color-text-disabled: rgba(60, 60, 67, 0.3);
+  --color-text: oklch(0.148 0.004 228.8);
+  --color-text-secondary: oklch(0.56 0.021 213.5);
+  --color-text-tertiary: oklch(0.68 0.015 213);
+  --color-text-disabled: oklch(0.78 0.012 213);
+  /* kbd 芯片 / 深中性填充 */
+  --color-fg-2: oklch(0.28 0.008 60);
+  /* 幽灵填充（图标按钮 hover） */
+  --color-fg-soft: color-mix(in oklab, oklch(0.148 0.004 228.8) 5%, transparent);
+  /* 内凹输入井 */
+  --color-input-well: color-mix(in oklab, oklch(0.148 0.004 228.8) 4%, transparent);
 
-  /* Aurora Violet — 品牌主色 */
-  --color-accent: #7c3aed;
-  --color-accent-hover: #6d28d9;
-  --color-accent-pressed: #5b21b6;
-  --color-accent-soft: rgba(124, 58, 237, 0.12);
-  --color-on-accent: #ffffff;
+  /* 深板岩 —— 唯一饱和色 */
+  --color-accent: #3a7294;
+  --color-accent-hover: color-mix(in oklab, #3a7294 88%, black 12%);
+  --color-accent-pressed: color-mix(in oklab, #3a7294 74%, black 26%);
+  --color-accent-soft: color-mix(in oklab, #3a7294 14%, transparent);
+  /* 板岩作为「文字」出现在亮底上时用这一档 */
+  --color-accent-text: color-mix(in oklab, #3a7294 62%, black);
+  --color-on-accent: oklch(0.97 0.008 237);
 
-  --color-success: #34c759;
-  --color-warning: #ff9500;
-  --color-danger: #ff3b30;
-  --color-focus: #7c3aed;
+  /* 语义色：低饱和，避免与板岩争抢注意力 */
+  --color-success: oklch(0.55 0.09 155);
+  --color-warning: oklch(0.65 0.12 70);
+  --color-danger: oklch(0.577 0.245 27.3);
+  --color-focus: #3a7294;
 
-  --color-success-soft: rgba(52, 199, 89, 0.14);
-  --color-warning-soft: rgba(255, 149, 0, 0.14);
-  --color-danger-soft: rgba(255, 59, 48, 0.12);
+  --color-success-soft: color-mix(in oklab, oklch(0.55 0.09 155) 14%, transparent);
+  --color-warning-soft: color-mix(in oklab, oklch(0.65 0.12 70) 14%, transparent);
+  --color-danger-soft: color-mix(in oklab, oklch(0.577 0.245 27.3) 12%, transparent);
 
   --color-overlay: rgba(0, 0, 0, 0.4);
 
-  /* —— 材质 —— */
-  --material-sidebar: rgba(245, 245, 250, 0.72);
-  --material-topbar: rgba(249, 249, 249, 0.78);
-  --material-sheet: rgba(255, 255, 255, 0.85);
-  --material-blur: 30px;
-  --material-saturate: 180%;
+  /* —— 材质 · 磨砂浮层（surface 80–92% + blur 14px + 1px 发丝线） —— */
+  --material-sidebar: color-mix(in oklab, oklch(0.968 0.003 95) 88%, transparent);
+  --material-topbar: color-mix(in oklab, oklch(0.968 0.003 95) 88%, transparent);
+  --material-sheet: color-mix(in oklab, oklch(1 0 0) 92%, transparent);
+  --material-blur: 14px;
+  --material-saturate: 100%;
 
   /* —— 字体 —— */
   --font-sans:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue",
-    "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+    "Outfit Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI",
+    "PingFang SC", sans-serif;
   --font-display:
-    -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Segoe UI",
-    "Microsoft YaHei UI", "PingFang SC", sans-serif;
-  --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+    "Outfit Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI",
+    "PingFang SC", sans-serif;
+  --font-mono:
+    "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", "SF Mono", Consolas,
+    "Microsoft YaHei UI", monospace;
 
-  /* —— 字号梯度 —— */
+  /* —— 字号梯度（沿用既有刻度，避免破坏布局） —— */
   --text-large-title: 34px;
   --text-title-1: 28px;
   --text-title-2: 22px;
@@ -72,13 +88,14 @@
   --text-footnote: 13px;
   --text-caption: 12px;
 
-  /* —— 圆角 —— */
+  /* —— 圆角（Marvis：10 卡片/输入 · 18 面板/窗口 · 999 药丸） —— */
   --radius-control: 10px;
-  --radius-surface: 12px;
-  --radius-dialog: 20px;
+  --radius-surface: 14px;
+  --radius-panel: 18px;
+  --radius-dialog: 18px;
   --radius-pill: 999px;
 
-  /* —— 间距（8pt grid）—— */
+  /* —— 间距（8pt grid，不变） —— */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -98,44 +115,38 @@
   --sidebar-compact-width: 68px;
   --page-padding: 24px;
 
-  /* —— 缓动曲线 —— */
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  /* —— 缓动：Marvis 只有一条曲线，全局复用 —— */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-drawer: cubic-bezier(0.2, 0, 0, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-ios: cubic-bezier(0.2, 0, 0, 1);
 
-  /* —— 时长 —— */
+  /* —— 时长：hover/颜色 150ms，形变/开关 200ms —— */
   --duration-instant: 100ms;
-  --duration-fast: 160ms;
+  --duration-fast: 150ms;
   --duration-base: 200ms;
-  --duration-slow: 300ms;
+  --duration-slow: 250ms;
 
-  /* —— 阴影 —— */
-  --shadow-sm: 0 0.5px 1px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.08);
-  --shadow-xl: 0 4px 16px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.16);
+  /* —— 阴影 · 深而柔（Marvis：面板 -16px 34%，窗口 -24px 40%） —— */
+  --shadow-sm: 0 1px 2px -1px color-mix(in oklab, oklch(0.148 0.004 228.8) 10%, transparent);
+  --shadow-md: 0 6px 16px -8px color-mix(in oklab, oklch(0.148 0.004 228.8) 22%, transparent);
+  --shadow-lg: 0 18px 40px -16px color-mix(in oklab, oklch(0.148 0.004 228.8) 34%, transparent);
+  --shadow-xl: 0 30px 70px -24px color-mix(in oklab, oklch(0.148 0.004 228.8) 40%, transparent);
   --shadow-menu: var(--shadow-lg);
-  --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-sheet: var(--shadow-xl);
 
-  /* —— Aurora 极光辉光 —— */
-  --aurora-violet: #8b5cf6;
-  --aurora-blue: #3b82f6;
-  --aurora-cyan: #06b6d4;
-  --aurora-pink: #ec4899;
-  --aurora-glow-1: rgba(139, 92, 246, 0.15);
-  --aurora-glow-2: rgba(6, 182, 212, 0.12);
-  --aurora-glow-3: rgba(236, 72, 153, 0.1);
+  /* —— 焦点环（Marvis：0 0 0 3px accent 45%） —— */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, #3a7294 45%, transparent);
 
-  /* —— 字重 / 行高阶梯 —— */
+  /* —— 字重 / 行高阶梯（正文 15px / 1.55） —— */
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
   --line-height-tight: 1.2;
   --line-height-snug: 1.4;
-  --line-height-normal: 1.6;
+  --line-height-normal: 1.55;
 
   /* —— z-index 阶梯（全局唯一依据，组件禁止自造数值） —— */
   --z-canvas: 10;
@@ -146,69 +157,68 @@
   --z-toast: 80;
   --z-immersive: 100;
 
-  /* —— 记忆画布节点色系（主题联动，替代 JS 内嵌色值） —— */
-  --canvas-node-note: var(--aurora-violet);
-  --canvas-node-image: var(--aurora-blue);
-  --canvas-node-script: #6366f1;
-  --canvas-node-video: var(--aurora-cyan);
-  --canvas-node-audio: #818cf8;
-  --canvas-node-default: #a78bfa;
-  --canvas-node-mark: #fbbf24;
+  /* —— 记忆画布节点色系（低饱和，与「一个色相」原则一致） —— */
+  --canvas-node-note: #3a7294;
+  --canvas-node-image: #5f8a7b;
+  --canvas-node-script: #8a7f6b;
+  --canvas-node-video: #4f7488;
+  --canvas-node-audio: #7a6f8a;
+  --canvas-node-default: #7b8489;
+  --canvas-node-mark: #b08a4a;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* —— 色彩 · 暗色主题 · 深蓝石板基底 —— */
-  --color-canvas: #080c14;
-  --color-surface: #0f1420;
-  --color-surface-subtle: #151c2c;
-  --color-surface-hover: rgba(235, 235, 245, 0.08);
-  --color-surface-selected: rgba(139, 92, 246, 0.18);
+  /* —— 色彩 · 暗色 · 冷调石板（板岩色保持不变） —— */
+  --color-canvas: oklch(0.185 0.012 237);
+  --color-surface: oklch(0.245 0.016 237);
+  --color-surface-subtle: oklch(0.275 0.014 237);
+  --color-surface-hover: color-mix(in oklab, oklch(0.93 0.006 230) 8%, transparent);
+  --color-surface-selected: color-mix(in oklab, #3a7294 26%, transparent);
 
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-border-subtle: rgba(255, 255, 255, 0.06);
-  --color-border-strong: rgba(255, 255, 255, 0.22);
+  --color-border: color-mix(in oklab, oklch(0.93 0.006 230) 18%, transparent);
+  --color-border-subtle: color-mix(in oklab, oklch(0.93 0.006 230) 10%, transparent);
+  --color-border-strong: color-mix(in oklab, oklch(0.93 0.006 230) 32%, transparent);
 
-  --color-text: #e8eaed;
-  --color-text-secondary: rgba(232, 234, 237, 0.6);
-  --color-text-tertiary: rgba(232, 234, 237, 0.35);
-  --color-text-disabled: rgba(232, 234, 237, 0.25);
+  --color-text: oklch(0.93 0.006 230);
+  --color-text-secondary: oklch(0.7 0.02 230);
+  --color-text-tertiary: oklch(0.58 0.018 230);
+  --color-text-disabled: oklch(0.46 0.014 230);
+  --color-fg-2: oklch(0.84 0.01 230);
+  --color-fg-soft: color-mix(in oklab, oklch(0.93 0.006 230) 8%, transparent);
+  --color-input-well: color-mix(in oklab, oklch(0.93 0.006 230) 7%, transparent);
 
-  /* Aurora Violet — 品牌主色 */
-  --color-accent: #8b5cf6;
-  --color-accent-hover: #a78bfa;
-  --color-accent-pressed: #7c3aed;
-  --color-accent-soft: rgba(139, 92, 246, 0.2);
-  --color-on-accent: #ffffff;
+  /* 板岩色不变；暗色下软色/文字档加强 */
+  --color-accent: #3a7294;
+  --color-accent-hover: color-mix(in oklab, #3a7294 88%, white 12%);
+  --color-accent-pressed: color-mix(in oklab, #3a7294 78%, black 22%);
+  --color-accent-soft: color-mix(in oklab, #3a7294 26%, transparent);
+  --color-accent-text: color-mix(in oklab, #3a7294 55%, white);
+  --color-on-accent: oklch(0.97 0.008 237);
 
-  --color-success: #34d399;
-  --color-warning: #fbbf24;
-  --color-danger: #f87171;
-  --color-focus: #8b5cf6;
+  --color-success: oklch(0.72 0.11 155);
+  --color-warning: oklch(0.78 0.12 75);
+  --color-danger: color-mix(in oklab, oklch(0.577 0.245 27.3) 75%, white);
+  --color-focus: #3a7294;
 
-  --color-success-soft: rgba(52, 211, 153, 0.18);
-  --color-warning-soft: rgba(251, 191, 36, 0.18);
-  --color-danger-soft: rgba(248, 113, 113, 0.16);
+  --color-success-soft: color-mix(in oklab, oklch(0.72 0.11 155) 18%, transparent);
+  --color-warning-soft: color-mix(in oklab, oklch(0.78 0.12 75) 18%, transparent);
+  --color-danger-soft: color-mix(in oklab, oklch(0.577 0.245 27.3) 22%, transparent);
 
-  --color-overlay: rgba(8, 12, 20, 0.7);
+  --color-overlay: rgba(0, 0, 0, 0.6);
 
-  /* —— 材质 · 暗色 —— */
-  --material-sidebar: rgba(15, 20, 32, 0.78);
-  --material-topbar: rgba(15, 20, 32, 0.82);
-  --material-sheet: rgba(21, 28, 44, 0.92);
+  /* —— 材质 · 暗色磨砂 —— */
+  --material-sidebar: color-mix(in oklab, oklch(0.185 0.012 237) 88%, transparent);
+  --material-topbar: color-mix(in oklab, oklch(0.185 0.012 237) 88%, transparent);
+  --material-sheet: color-mix(in oklab, oklch(0.245 0.016 237) 92%, transparent);
 
-  /* —— 阴影 · 暗色 —— */
-  --shadow-sm: 0 0.5px 1px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.6);
-  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.6), 0 12px 32px rgba(0, 0, 0, 0.7);
-  --shadow-xl: 0 4px 16px rgba(0, 0, 0, 0.7), 0 24px 64px rgba(0, 0, 0, 0.8);
-  --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.8), 0 2px 8px rgba(0, 0, 0, 0.6);
-
-  /* —— Aurora 极光 · 暗色增强 —— */
-  --aurora-glow-1: rgba(139, 92, 246, 0.2);
-  --aurora-glow-2: rgba(6, 182, 212, 0.16);
-  --aurora-glow-3: rgba(236, 72, 153, 0.12);
+  /* —— 阴影 · 暗色（黑基底，更深） —— */
+  --shadow-sm: 0 1px 2px -1px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 6px 16px -8px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 18px 40px -16px rgba(0, 0, 0, 0.7);
+  --shadow-xl: 0 30px 70px -24px rgba(0, 0, 0, 0.8);
+  --shadow-sheet: var(--shadow-xl);
 }
 
 :root[data-density="compact"] {
@@ -217,7 +227,7 @@
   --topbar-height: 48px;
   --page-padding: 20px;
   --radius-control: 8px;
-  --radius-surface: 10px;
+  --radius-surface: 12px;
 }
 
 :root[data-density="comfortable"] {
@@ -226,5 +236,5 @@
   --topbar-height: 64px;
   --page-padding: 28px;
   --radius-control: 12px;
-  --radius-surface: 14px;
+  --radius-surface: 16px;
 }

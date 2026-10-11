@@ -244,12 +244,12 @@ function phaseIcon(phase: RuntimePhase | null) {
 .pipeline__fill {
   height: 100%;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--color-accent), var(--aurora-cyan));
+  background: var(--color-accent);
   transition: width var(--duration-slow) var(--ease-out);
 }
 
 .pipeline__fill--done {
-  background: linear-gradient(90deg, var(--color-success), var(--aurora-cyan));
+  background: var(--color-success);
 }
 
 .pipeline__meta {

@@ -8,7 +8,6 @@
 import { computed, onMounted } from "vue";
 import { RouterView, useRoute } from "vue-router";
 
-import AuroraCanvas from "../shared/visual/AuroraCanvas.vue";
 import ToastViewport from "../shared/ui/ToastViewport.vue";
 import AppSidebar from "./shell/AppSidebar.vue";
 import AppTopbar from "./shell/AppTopbar.vue";
@@ -34,7 +33,6 @@ onMounted(() => {
     <AppSidebar />
 
     <section class="app-workspace">
-      <AuroraCanvas class="app-workspace__aurora" />
       <AppTopbar />
       <main class="page-scroll" :class="{ 'is-flush': isFlushRoute }" tabindex="-1">
         <RouterView />
@@ -62,12 +60,6 @@ onMounted(() => {
   grid-template-rows: var(--topbar-height) minmax(0, 1fr);
   background: var(--color-canvas);
   overflow: hidden;
-}
-
-.app-workspace__aurora {
-  z-index: 0;
-  grid-row: 1 / -1;
-  grid-column: 1 / -1;
 }
 
 /* —— 内容滚动区 —— */
