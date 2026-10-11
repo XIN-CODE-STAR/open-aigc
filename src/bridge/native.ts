@@ -37,6 +37,20 @@ export async function invokeNative<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   if (!isNativeRuntimeAvailable()) {
+    // 浏览器调试用的 mock 桥接：只在 DEV 下**动态 import**，生产构建不含这段代码。
+    // 测试环境（MODE === "test"）下 mock 自动关闭，保证「无运行时」断言不被影响。
+    if (import.meta.env.DEV) {
+      const { resolveDevMock } = await import("./devMock");
+      const mocked = resolveDevMock(command, args);
+      if (mocked !== undefined) {
+        const parsed = responseSchema.safeParse(mocked);
+        if (parsed.success) return parsed.data;
+        console.warn(
+          `[devMock] ${command} 的示例数据未通过 schema 校验，已回退到桌面运行时错误。`,
+          parsed.error,
+        );
+      }
+    }
     throw new NativeCommandError(
       "desktop_runtime_required",
       "此功能只能在 OPEN AIGC 桌面应用中使用。",
