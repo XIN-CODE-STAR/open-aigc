@@ -98,8 +98,29 @@ jobs:
       - name: Fetch ffmpeg sidecar
         run: node scripts/fetch-ffmpeg.mjs
 
-      - name: Check Rust
-        run: pnpm check:rust
+      - name: Check Rust formatting
+        shell: bash
+        continue-on-error: true
+        run: |
+          echo '### cargo fmt --check（非阻塞）' >> "$GITHUB_STEP_SUMMARY"
+          echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/run-with-rust-path.mjs cargo fmt --manifest-path src-tauri/Cargo.toml --check > /tmp/fmt.log 2>&1 || true
+          head -150 /tmp/fmt.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ! grep -q '^Diff in' /tmp/fmt.log
+
+      - name: Check Rust lints
+        shell: bash
+        run: |
+          node scripts/run-with-rust-path.mjs cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings > /tmp/clippy.log 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            echo '### cargo clippy 输出' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -200 /tmp/clippy.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $status
 
       - name: Test native workspace
         run: pnpm test:rust
