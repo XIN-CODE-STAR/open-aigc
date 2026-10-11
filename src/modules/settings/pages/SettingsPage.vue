@@ -589,7 +589,7 @@ function onMaxTokensInput(event: Event): void {
 .segmented-control button.is-selected {
   color: var(--color-text);
   background: var(--color-surface);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+  box-shadow: var(--shadow-sm);
   font-weight: 600;
 }
 
@@ -685,7 +685,7 @@ function onMaxTokensInput(event: Event): void {
   border-radius: 50%;
   background: var(--color-accent);
   border: 2px solid var(--color-surface);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
 }
 

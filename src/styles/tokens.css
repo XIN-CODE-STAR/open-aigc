@@ -50,6 +50,7 @@
   --color-success: oklch(0.55 0.09 155);
   --color-warning: oklch(0.65 0.12 70);
   --color-danger: oklch(0.577 0.245 27.3);
+  --color-on-danger: oklch(0.985 0.005 95);
   --color-focus: #3a7294;
 
   --color-success-soft: color-mix(in oklab, oklch(0.55 0.09 155) 14%, transparent);
@@ -200,6 +201,7 @@
   --color-success: oklch(0.72 0.11 155);
   --color-warning: oklch(0.78 0.12 75);
   --color-danger: color-mix(in oklab, oklch(0.577 0.245 27.3) 75%, white);
+  --color-on-danger: oklch(0.22 0.06 27);
   --color-focus: #3a7294;
 
   --color-success-soft: color-mix(in oklab, oklch(0.72 0.11 155) 18%, transparent);

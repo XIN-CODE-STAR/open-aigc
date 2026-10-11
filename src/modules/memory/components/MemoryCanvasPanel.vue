@@ -1358,20 +1358,20 @@ function getNodeColor(type: string | undefined): string {
 }
 
 .memory-canvas-panel .vue-flow__controls-button:hover {
-  background: rgb(99 102 241 / 28%);
+  background: color-mix(in oklab, var(--color-accent) 30%, transparent);
   color: var(--color-text);
 }
 
 .memory-canvas-panel .vue-flow__selection {
-  background: rgb(99 102 241 / 8%);
-  border: 1.5px dashed #818cf8;
+  background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  border: 1.5px dashed var(--color-accent);
   border-radius: 4px;
 }
 
 .memory-canvas-panel .vue-flow__edge.selected .vue-flow__edge-path {
-  stroke: #818cf8;
+  stroke: var(--color-accent);
   stroke-width: 3;
-  filter: drop-shadow(0 0 4px rgb(129 140 248 / 50%));
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--color-accent) 50%, transparent));
 }
 
 /* 新创建节点：出现脉冲（便签交互反馈） */
@@ -1382,8 +1382,8 @@ function getNodeColor(type: string | undefined): string {
 @keyframes node-appear {
   0% {
     box-shadow:
-      0 0 0 4px rgb(129 140 248 / 75%),
-      0 0 30px rgb(129 140 248 / 50%);
+      0 0 0 4px color-mix(in oklab, var(--color-accent) 75%, transparent),
+      0 0 30px color-mix(in oklab, var(--color-accent) 50%, transparent);
     transform: scale(1.06);
   }
   100% {
@@ -1394,10 +1394,10 @@ function getNodeColor(type: string | undefined): string {
 
 /* 选中节点：细 ring + 柔光 */
 .memory-canvas .vue-flow__node.selected .canvas-node {
-  border-color: rgb(129 140 248 / 55%);
+  border-color: color-mix(in oklab, var(--color-accent) 55%, transparent);
   box-shadow:
-    0 0 0 1.5px rgb(129 140 248 / 90%),
-    0 0 24px rgb(129 140 248 / 28%),
+    0 0 0 1.5px color-mix(in oklab, var(--color-accent) 90%, transparent),
+    0 0 24px color-mix(in oklab, var(--color-accent) 28%, transparent),
     0 10px 30px rgb(0 0 0 / 45%);
 }
 
@@ -1414,7 +1414,7 @@ function getNodeColor(type: string | undefined): string {
 /* hover 连线时高亮其两端节点（Phase 4） */
 .memory-canvas .vue-flow__node.edge-endpoint-highlight .canvas-node {
   box-shadow:
-    0 0 0 2px rgb(129 140 248 / 60%),
+    0 0 0 2px color-mix(in oklab, var(--color-accent) 60%, transparent),
     0 6px 20px rgb(0 0 0 / 45%);
 }
 
@@ -1427,7 +1427,7 @@ function getNodeColor(type: string | undefined): string {
 
 .memory-canvas .vue-flow__node:hover .vue-flow__handle {
   transform: scale(1.35);
-  box-shadow: 0 0 0 3px rgb(129 140 248 / 30%);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 30%, transparent);
   cursor: crosshair;
 }
 
@@ -1620,7 +1620,7 @@ function getNodeColor(type: string | undefined): string {
 .canvas-dock__btn--active:hover:not(:disabled) {
   color: var(--color-text);
   background: var(--color-accent);
-  box-shadow: 0 2px 12px rgb(99 102 241 / 50%);
+  box-shadow: 0 2px 12px color-mix(in oklab, var(--color-accent) 50%, transparent);
 }
 
 .canvas-dock__btn--danger:hover:not(:disabled) {
@@ -1808,7 +1808,7 @@ function getNodeColor(type: string | undefined): string {
   height: 8px;
   border-radius: 50%;
   background: var(--color-accent);
-  box-shadow: 0 0 8px rgb(99 102 241 / 80%);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--color-accent) 80%, transparent);
 }
 
 .canvas-topbar__title {
@@ -1855,11 +1855,11 @@ function getNodeColor(type: string | undefined): string {
 
 .canvas-topbar__btn--accent {
   color: var(--color-text);
-  background: rgb(99 102 241 / 35%);
+  background: color-mix(in oklab, var(--color-accent) 35%, transparent);
 }
 
 .canvas-topbar__btn--accent:hover {
-  background: rgb(99 102 241 / 55%);
+  background: color-mix(in oklab, var(--color-accent) 55%, transparent);
   color: var(--color-text);
 }
 /* Loading */

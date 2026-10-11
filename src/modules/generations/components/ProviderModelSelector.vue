@@ -373,10 +373,10 @@ const emptySourceHint = computed(() => {
   align-items: center;
   gap: 5px;
   padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.85);
+  background: var(--color-fg-soft);
+  color: var(--color-text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-out);
@@ -384,8 +384,8 @@ const emptySourceHint = computed(() => {
 }
 
 .model-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
 }
 
 .model-btn:disabled {
@@ -429,17 +429,6 @@ const emptySourceHint = computed(() => {
   transform: rotate(180deg);
 }
 
-:root:not([data-theme="dark"]) .model-btn {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.1);
-  color: rgba(0, 0, 0, 0.8);
-}
-
-:root:not([data-theme="dark"]) .model-btn:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.2);
-}
-
 .model-pop {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -448,18 +437,12 @@ const emptySourceHint = computed(() => {
   max-width: 280px;
   padding: 4px;
   border-radius: 12px;
-  background: rgba(28, 28, 30, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  background: var(--material-sheet);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sheet);
   z-index: 30;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-}
-
-:root:not([data-theme="dark"]) .model-pop {
-  background: rgba(255, 255, 255, 0.98);
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
 /* 向下弹出的变体（欢迎页输入卡内使用） */
@@ -474,11 +457,7 @@ const emptySourceHint = computed(() => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.3);
-}
-
-:root:not([data-theme="dark"]) .model-pop-group-label {
-  color: rgba(0, 0, 0, 0.35);
+  color: var(--color-text-tertiary);
 }
 
 .model-pop-item {
@@ -490,14 +469,14 @@ const emptySourceHint = computed(() => {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--color-text-secondary);
   text-align: left;
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-out);
 }
 
 .model-pop-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--color-surface-hover);
 }
 
 .model-pop-item.is-selected {
@@ -515,7 +494,7 @@ const emptySourceHint = computed(() => {
 .model-pop-name {
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -523,11 +502,11 @@ const emptySourceHint = computed(() => {
 
 .model-pop-provider {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--color-text-tertiary);
 }
 
 .model-pop-check {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   flex-shrink: 0;
 }
 
@@ -556,8 +535,8 @@ const emptySourceHint = computed(() => {
   padding: 3px 8px;
   margin-left: 6px;
   border-radius: 4px;
-  background: rgba(255, 159, 64, 0.15);
-  border: 1px solid rgba(255, 159, 64, 0.3);
+  background: var(--color-warning-soft);
+  border: 1px solid color-mix(in oklab, var(--color-warning) 30%, transparent);
   color: var(--color-warning);
   font-size: 10px;
   font-weight: 500;
@@ -567,23 +546,7 @@ const emptySourceHint = computed(() => {
 }
 
 .model-pop-reauth:hover {
-  background: rgba(255, 159, 64, 0.25);
-}
-
-:root:not([data-theme="dark"]) .model-pop-item {
-  color: rgba(0, 0, 0, 0.85);
-}
-
-:root:not([data-theme="dark"]) .model-pop-item:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-:root:not([data-theme="dark"]) .model-pop-name {
-  color: rgba(0, 0, 0, 0.95);
-}
-
-:root:not([data-theme="dark"]) .model-pop-provider {
-  color: rgba(60, 60, 67, 0.55);
+  background: color-mix(in oklab, var(--color-warning) 25%, transparent);
 }
 
 .menu-enter-active,

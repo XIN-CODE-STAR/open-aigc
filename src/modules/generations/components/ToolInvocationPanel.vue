@@ -185,7 +185,7 @@ function onToggle(id: string): void {
   align-items: center;
   gap: 4px;
   font-size: 10px;
-  color: rgba(59, 130, 246, 0.85);
+  color: var(--color-accent-text);
 }
 
 /* 旋转动画：scoped 样式无法从父页面穿透到本组件内部元素，

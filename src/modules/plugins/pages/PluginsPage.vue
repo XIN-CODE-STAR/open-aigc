@@ -849,8 +849,8 @@ textarea.plugins-input {
 }
 
 .plugins-btn--danger:hover:not(:disabled) {
-  color: #f87171;
-  border-color: rgb(248 113 113 / 40%);
+  color: var(--color-danger);
+  border-color: color-mix(in oklab, var(--color-danger) 40%, transparent);
 }
 
 .plugin-card {
@@ -934,13 +934,13 @@ textarea.plugins-input {
 }
 
 .plugin-badge.is-on {
-  color: #34d399;
-  background: rgb(52 211 153 / 12%);
+  color: var(--color-success);
+  background: var(--color-success-soft);
 }
 
 .plugin-badge.is-off {
-  color: #94a3b8;
-  background: rgb(148 163 184 / 12%);
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-hover);
 }
 
 .plugin-body {

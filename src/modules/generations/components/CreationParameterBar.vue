@@ -286,29 +286,18 @@ function ratioPreviewStyle(item: AspectRatioItem, base: number): Record<string, 
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.85);
+  background: var(--color-fg-soft);
+  color: var(--color-text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-out);
 }
 
 .param-chip:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-:root:not([data-theme="dark"]) .param-chip {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.1);
-  color: rgba(0, 0, 0, 0.8);
-}
-
-:root:not([data-theme="dark"]) .param-chip:hover {
-  background: rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.2);
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
 }
 
 .param-ratio {
@@ -327,7 +316,7 @@ function ratioPreviewStyle(item: AspectRatioItem, base: number): Record<string, 
   padding: 0 4px;
   border-radius: 4px;
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -349,18 +338,12 @@ function ratioPreviewStyle(item: AspectRatioItem, base: number): Record<string, 
   min-width: 140px;
   padding: 4px;
   border-radius: 12px;
-  background: rgba(28, 28, 30, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  background: var(--material-sheet);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sheet);
   z-index: 30;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-}
-
-:root:not([data-theme="dark"]) .param-pop {
-  background: rgba(255, 255, 255, 0.98);
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
 .param-pop-item {
@@ -372,7 +355,7 @@ function ratioPreviewStyle(item: AspectRatioItem, base: number): Record<string, 
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--color-text-secondary);
   font-size: 12px;
   text-align: left;
   cursor: pointer;
@@ -380,11 +363,11 @@ function ratioPreviewStyle(item: AspectRatioItem, base: number): Record<string, 
 }
 
 .param-pop-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--color-surface-hover);
 }
 
 .param-pop-item.is-selected {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .param-pop-ratio {
@@ -396,14 +379,6 @@ function ratioPreviewStyle(item: AspectRatioItem, base: number): Record<string, 
 
 .param-pop-check {
   margin-left: auto;
-}
-
-:root:not([data-theme="dark"]) .param-pop-item {
-  color: rgba(0, 0, 0, 0.85);
-}
-
-:root:not([data-theme="dark"]) .param-pop-item:hover {
-  background: rgba(0, 0, 0, 0.04);
 }
 
 /* —— 过渡：菜单 —— */

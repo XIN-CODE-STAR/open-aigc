@@ -195,7 +195,7 @@ async function selectAndImport(): Promise<void> {
 }
 
 .summary-icon-warn {
-  color: #b7791f;
+  color: var(--color-warning);
 }
 
 .summary-icon-err {

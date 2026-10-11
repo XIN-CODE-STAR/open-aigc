@@ -659,13 +659,13 @@ const editorOpen = computed(() => editingPrompt.value !== null || isCreating.val
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-pill);
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--color-surface-hover);
   font-size: 10px;
   font-weight: 600;
 }
 
 .category-tab.is-active .count {
-  background: rgba(255, 255, 255, 0.24);
+  background: color-mix(in srgb, var(--color-on-accent) 24%, transparent);
 }
 
 .prompts-grid {
@@ -724,24 +724,24 @@ const editorOpen = computed(() => editingPrompt.value !== null || isCreating.val
   align-items: center;
   border-radius: var(--radius-pill);
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-size: var(--text-caption);
   font-weight: 500;
 }
 
 .category-tag[data-category="video"] {
-  background: rgba(120, 90, 200, 0.12);
-  color: rgb(120, 90, 200);
+  background: color-mix(in oklab, oklch(0.62 0.12 295) 14%, transparent);
+  color: color-mix(in oklab, oklch(0.62 0.12 295) 80%, var(--color-text));
 }
 
 .category-tag[data-category="text"] {
-  background: rgba(60, 130, 80, 0.12);
-  color: rgb(60, 130, 80);
+  background: color-mix(in oklab, oklch(0.62 0.11 150) 14%, transparent);
+  color: color-mix(in oklab, oklch(0.62 0.11 150) 80%, var(--color-text));
 }
 
 .category-tag[data-category="design"] {
-  background: rgba(200, 130, 60, 0.12);
-  color: rgb(200, 130, 60);
+  background: color-mix(in oklab, oklch(0.68 0.12 65) 14%, transparent);
+  color: color-mix(in oklab, oklch(0.68 0.12 65) 80%, var(--color-text));
 }
 
 .category-tag[data-category="other"] {

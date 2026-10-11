@@ -98,7 +98,7 @@ function choose(item: CanvasMenuItem): void {
   border: 1px solid var(--color-border-subtle);
   border-radius: 8px;
   background: var(--color-surface);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  box-shadow: var(--shadow-menu);
 }
 
 .canvas-menu__item {

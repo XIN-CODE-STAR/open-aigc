@@ -1606,18 +1606,12 @@ function formatTime(iso: string): string {
   width: 280px;
   padding: 14px;
   border-radius: 12px;
-  background: rgba(28, 28, 30, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  background: var(--material-sheet);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-menu);
   z-index: 30;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-}
-
-:root:not([data-theme="dark"]) .grok-prefs {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
 .prefs-head {
@@ -1626,12 +1620,8 @@ function formatTime(iso: string): string {
   justify-content: space-between;
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
   margin-bottom: 12px;
-}
-
-:root:not([data-theme="dark"]) .prefs-head {
-  color: rgba(0, 0, 0, 0.85);
 }
 
 .prefs-close {
@@ -1643,12 +1633,12 @@ function formatTime(iso: string): string {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--color-text-tertiary);
   cursor: pointer;
 }
 
 .prefs-close:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-fg-soft);
 }
 
 .prefs-section {
@@ -1660,7 +1650,7 @@ function formatTime(iso: string): string {
 .prefs-label {
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--color-text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -1713,15 +1703,9 @@ function formatTime(iso: string): string {
 .grok-prefs {
   top: 76px;
   border-radius: var(--radius-surface);
-  background: var(--material-sheet);
-  border-color: var(--color-border-subtle);
-  box-shadow: var(--shadow-menu);
 }
 
-.prefs-head,
-.prefs-mode,
-:root:not([data-theme="dark"]) .prefs-head,
-:root:not([data-theme="dark"]) .prefs-mode {
+.prefs-mode {
   color: var(--color-text);
 }
 
@@ -1770,12 +1754,6 @@ function formatTime(iso: string): string {
   -webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
   border: 1px solid var(--color-border-subtle);
   border-radius: 16px;
-  box-shadow: var(--shadow-lg);
-}
-
-:root:not([data-theme="dark"]) .grok-conversation :deep(.composer-box.composer-box) {
-  background: var(--material-sheet);
-  border-color: var(--color-border-subtle);
   box-shadow: var(--shadow-lg);
 }
 
@@ -1970,7 +1948,7 @@ function formatTime(iso: string): string {
 }
 
 .clear-conversation__btn.is-danger {
-  color: #ffffff;
+  color: var(--color-on-danger);
   border-color: transparent;
   background: var(--color-danger);
 }

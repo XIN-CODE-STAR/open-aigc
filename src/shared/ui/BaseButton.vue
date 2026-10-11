@@ -131,7 +131,7 @@ function onClick(event: MouseEvent): void {
 
 .base-btn--danger:hover:not(:disabled) {
   background: var(--color-danger);
-  color: #ffffff;
+  color: var(--color-on-danger);
 }
 
 .base-btn--block {

@@ -149,7 +149,7 @@ const mcpServers = ref([{ name: "内置工具", status: "connected", count: buil
   flex-direction: column;
   border-left: 1px solid var(--color-border-subtle);
   background: var(--color-surface);
-  box-shadow: -8px 0 32px rgb(0 0 0 / 40%);
+  box-shadow: var(--shadow-xl);
 }
 
 .ext-header {
@@ -244,7 +244,7 @@ const mcpServers = ref([{ name: "内置工具", status: "connected", count: buil
   cursor: pointer;
 }
 .ext-item--clickable:hover {
-  border-color: rgb(99 102 241 / 30%);
+  border-color: color-mix(in oklab, var(--color-accent) 30%, transparent);
 }
 .ext-item__icon {
   color: var(--color-accent);

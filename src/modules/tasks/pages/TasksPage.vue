@@ -1204,7 +1204,7 @@ onMounted(() => {
 }
 
 .tasks__menu-confirm.is-danger {
-  color: #ffffff;
+  color: var(--color-on-danger);
   border-color: transparent;
   background: var(--color-danger);
 }
