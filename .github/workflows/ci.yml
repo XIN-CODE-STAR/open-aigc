@@ -95,6 +95,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Fetch ffmpeg sidecar
+        run: node scripts/fetch-ffmpeg.mjs
+
       - name: Check Rust
         run: pnpm check:rust
 
@@ -103,3 +106,10 @@ jobs:
 
       - name: Build Tauri executable
         run: pnpm tauri build --no-bundle --ci
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: aigc-studio-windows
+          path: src-tauri/target/release/*.exe
+          if-no-files-found: error
