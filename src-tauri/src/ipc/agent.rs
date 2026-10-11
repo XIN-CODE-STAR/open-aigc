@@ -36,6 +36,12 @@ pub struct DeleteConversationRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClearConversationRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RenameConversationRequest {
     pub id: String,
     pub title: String,
@@ -149,6 +155,14 @@ pub async fn agent_v1_delete_conversation(
     let _ = canvas_cleanup.await;
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn agent_v1_clear_conversation(
+    app: AppHandle,
+    request: ClearConversationRequest,
+) -> Result<(), IpcError> {
+    with_agent_service_write(app, move |service| service.clear_conversation(&request.id)).await
 }
 
 #[tauri::command]

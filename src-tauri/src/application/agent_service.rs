@@ -440,6 +440,16 @@ impl AgentService {
         })
     }
 
+    /// 清空会话的消息记录，保留会话本身。
+    ///
+    /// 「清空对话」走这条路径——不新建会话，避免历史里多出一条空会话。
+    pub fn clear_conversation(&self, conversation_id: &str) -> Result<(), AppError> {
+        self.with_agent_repository(|repo| {
+            repo.clear_conversation(conversation_id)
+                .map_err(AppError::from)
+        })
+    }
+
     /// 重命名会话标题。标题规则与创建会话一致（非空、≤200 字符）。
     pub fn rename_conversation(
         &self,
