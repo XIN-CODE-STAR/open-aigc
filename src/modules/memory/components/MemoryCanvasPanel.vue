@@ -1927,8 +1927,8 @@ function getNodeColor(type: string | undefined): string {
   flex: 1;
   width: 100%;
   min-height: 0;
-  /* 径向深度渐变：中心微亮，边缘沉下去 */
-  background: radial-gradient(1100px 720px at 50% 38%, #151c30 0%, #0d1220 55%, #0a0e19 100%);
+  /* 画布底交给主题令牌，随亮/暗自动切换（原为写死的深蓝径向渐变） */
+  background: var(--color-canvas);
 }
 
 /* 小地图隐藏/显示按钮 */

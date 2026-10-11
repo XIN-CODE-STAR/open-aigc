@@ -52,7 +52,7 @@
 | 后端 | Rust（领域驱动分层：domain / application / adapters / ports / ipc） |
 | 数据 | 本地优先 SQLite（checksum 迁移 + 事务性备份） |
 | 校验 | 前后端双层 zod / serde 严格校验，IPC 拒绝未知字段 |
-| 视觉 | OGL WebGL 背景（棱镜光效）、Lucide 图标 |
+| 视觉 | 本地 Outfit / JetBrains Mono 字体、OKLch 设计令牌（单一板岩主色）、Lucide 图标 |
 | 测试 | Vitest（前端）+ cargo test（Rust） |
 
 ## 架构一览

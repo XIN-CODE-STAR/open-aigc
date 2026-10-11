@@ -19,6 +19,7 @@ import { listCredentials, type CredentialRecord } from "../../../bridge/credenti
 import { listResourceAccounts, type ResourceAccountRecord } from "../../../bridge/resourceAccounts";
 import { memoryV1Status } from "../../../bridge/memory";
 import { useToast } from "../../../shared/ui/useToast";
+import ModalDialog from "../../../shared/ui/ModalDialog.vue";
 import { useGenerationHistory } from "../composables/useGenerationHistory";
 import { useAgentConversation } from "../composables/useAgentConversation";
 import { isGenerationNodeTool } from "../generationNodeTools";
@@ -1236,6 +1237,42 @@ function startNewAgentConversation(): void {
   nextTick(() => scrollToBottom());
 }
 
+/* ──────────────────────────────────────────────
+ *  清空对话：删除消息、保留会话
+ * ────────────────────────────────────────────── */
+
+const clearConfirmOpen = ref(false);
+const clearBusy = ref(false);
+
+/** 打开「清空对话」确认框——清空是破坏性操作，必须先确认。 */
+function requestClearConversation(): void {
+  if (!agentConversation.value) return;
+  clearConfirmOpen.value = true;
+}
+
+/**
+ * 确认清空：删除当前会话的消息记录，**会话本身保留**，用户留在同一会话里。
+ *
+ * 绝不能走「新建会话」——那会在历史里凭空多出一条空会话，正是要修的错接。
+ */
+async function confirmClearConversation(): Promise<void> {
+  if (clearBusy.value) return;
+  clearBusy.value = true;
+  try {
+    const ok = await agent.clearConversation();
+    if (ok) {
+      toast.success("已清空该对话的消息。");
+      clearConfirmOpen.value = false;
+      await nextTick();
+      scrollToBottom();
+    } else {
+      toast.error(agent.errorMessage.value ?? "清空对话失败。");
+    }
+  } finally {
+    clearBusy.value = false;
+  }
+}
+
 /**
  * 回答 Agent 的提问：将答案作为新消息发送，恢复 Agent 循环。
  */
@@ -1455,6 +1492,7 @@ function formatTime(iso: string): string {
         :can-send="canSend"
         :has-credentials="credentials.length > 0 || resourceAccounts.some((a) => a.enabled)"
         :is-agent-mode="isAgentMode"
+        :can-clear-conversation="!!agentConversation"
         :reference-images="referenceImages"
         :credentials="credentials"
         :selected-credential-id="selectedCredentialId"
@@ -1484,6 +1522,7 @@ function formatTime(iso: string): string {
         @prompt-keydown="onPromptKeydown"
         @drop-files="addReferenceFiles($event)"
         @start-new-agent-conversation="startNewAgentConversation"
+        @clear-agent-conversation="requestClearConversation"
         @toggle-preferences="showPreferences = !showPreferences"
         @select-directory="projectDir.selectDirectory()"
         @select-project="projectDir.selectRecent($event)"
@@ -1498,6 +1537,37 @@ function formatTime(iso: string): string {
       :visible="showExtensionPanel"
       @close="showExtensionPanel = false"
     />
+
+    <!-- 清空对话确认：破坏性操作，需明确确认 -->
+    <ModalDialog
+      :open="clearConfirmOpen"
+      :busy="clearBusy"
+      title="清空这个对话"
+      description="将删除该对话的全部消息记录，对话本身会保留。"
+      @close="clearBusy ? undefined : (clearConfirmOpen = false)"
+    >
+      <p class="clear-conversation__hint">
+        此操作不可撤销，已清空的消息无法恢复。生成结果仍保留在资产库与工作目录中。
+      </p>
+      <template #footer>
+        <button
+          type="button"
+          class="clear-conversation__btn"
+          :disabled="clearBusy"
+          @click="clearConfirmOpen = false"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="clear-conversation__btn is-danger"
+          :disabled="clearBusy"
+          @click="confirmClearConversation"
+        >
+          {{ clearBusy ? "清空中…" : "清空对话" }}
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>
 
@@ -1864,5 +1934,48 @@ function formatTime(iso: string): string {
 .analysis-panel-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(8px);
+}
+
+/* —— 清空对话确认框 —— */
+.clear-conversation__hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote);
+  line-height: var(--line-height-normal);
+}
+
+.clear-conversation__btn {
+  height: 32px;
+  padding: 0 var(--space-4);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--text-footnote);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.clear-conversation__btn:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.clear-conversation__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.clear-conversation__btn.is-danger {
+  color: #ffffff;
+  border-color: transparent;
+  background: var(--color-danger);
+}
+
+.clear-conversation__btn.is-danger:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 </style>

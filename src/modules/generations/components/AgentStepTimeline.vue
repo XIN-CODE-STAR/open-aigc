@@ -15,6 +15,11 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { Hash, LoaderCircle, Sparkles } from "@lucide/vue";
 import type { PlanRecord } from "../../../bridge/agent";
 import type { AgentMessageGroup, AgentLoopPhase } from "../composables/useAgentConversation";
+import {
+  isVideoUrl,
+  parseUserMessageContent as parseUserContent,
+  renderRichContent as renderContent,
+} from "../../../shared/utils/richText";
 import ExecutionPlanPanel from "./ExecutionPlanPanel.vue";
 import ToolInvocationPanel from "./ToolInvocationPanel.vue";
 
@@ -136,7 +141,7 @@ function extractVideoUrls(resultJson: string | null): string[] {
   try {
     const data = JSON.parse(resultJson);
     const urls: string[] = [];
-    if (typeof data.imageUrl === "string" && VIDEO_EXT.test(data.imageUrl)) {
+    if (typeof data.imageUrl === "string" && isVideoUrl(data.imageUrl)) {
       urls.push(data.imageUrl);
     }
     const remoteId: string = data.attempt?.remoteJobId || "";
@@ -158,48 +163,14 @@ function extractVideoUrls(resultJson: string | null): string[] {
 }
 
 /**
- * 解析用户消息内容。
- * 后端将含附件的消息存为 JSON：`{"images": [...], "text": "..."}`。
- * 纯文本消息直接返回。返回值拆开 text 与 images，避免 base64 出现在文字区。
+ * 解析用户消息内容 / 渲染 markdown 媒体语法由 `shared/utils/richText` 统一提供，
+ * 避免与「任务」页只读回放各写一份。
  */
-function parseUserContent(raw: string | null): { text: string; images: string[] } {
-  if (!raw) return { text: "", images: [] };
-  try {
-    const data = JSON.parse(raw);
-    if (typeof data === "object" && data !== null && typeof data.text === "string") {
-      const imgs = Array.isArray(data.images)
-        ? data.images.filter((i: unknown) => typeof i === "string" && i.length > 0)
-        : [];
-      console.log("[parseUserContent] multimodal message", {
-        textLen: data.text.length,
-        imageCount: imgs.length,
-        rawLen: raw.length,
-      });
-      return { text: data.text, images: imgs };
-    }
-  } catch {
-    // not JSON — plain text
-  }
-  console.log("[parseUserContent] plain text", { rawLen: raw.length });
-  return { text: raw, images: [] };
-}
 
 /**
  * 将 data: URL 转为 blob: URL，解决部分 Webview 对 data URL 渲染的兼容问题。
  * 转换失败时回退到原始 data URL。
  */
-/** 视频扩展名：markdown 图片语法中带这些扩展名时渲染为 <video>（P1 视频闭环）。 */
-const VIDEO_EXT = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
-
-function renderContent(content: string): string {
-  return content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt: string, url: string) => {
-    if (VIDEO_EXT.test(url)) {
-      return `<video src="${url}" controls preload="metadata" style="max-width:100%;max-height:400px;border-radius:8px;margin:8px 0;display:block;"></video>`;
-    }
-    return `<img src="${url}" alt="${alt}" style="max-width:100%;max-height:400px;border-radius:8px;margin:8px 0;display:block;object-fit:contain;" />`;
-  });
-}
-
 function dataUrlToBlobUrl(dataUrl: string): string {
   if (!dataUrl.startsWith("data:")) return dataUrl;
   try {
@@ -392,7 +363,8 @@ function handleImageError(event: Event) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 860px;
+  /* 与创作器（max-width 720px）对齐，避免消息列与输入框错位 */
+  max-width: 720px;
   margin: 0 auto;
   padding: 8px var(--page-padding) 24px;
 }
@@ -403,12 +375,14 @@ function handleImageError(event: Event) {
   gap: 8px;
 }
 
+/* 用户消息：Marvis 把 accent 留给「主操作/它活着」，这里用安静的中性凹槽 */
 .turn-user {
   align-self: flex-end;
   max-width: 78%;
   padding: 10px 14px;
-  background: var(--color-accent-soft);
-  border-radius: 14px 14px 4px 14px;
+  background: var(--color-input-well);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-panel);
   color: var(--color-text);
   font-size: 13px;
   line-height: var(--line-height-normal);
@@ -435,12 +409,15 @@ function handleImageError(event: Event) {
   cursor: pointer;
 }
 
+/* 时间戳属于元数据：Marvis 用等宽 */
 .turn-meta {
   margin-top: 4px;
-  font-size: 10px;
-  color: var(--color-text-tertiary);
   display: flex;
   gap: 6px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
 }
 
 .dot {
@@ -470,15 +447,16 @@ function handleImageError(event: Event) {
   display: inline;
 }
 
+/* 流式光标：Marvis 规格 7×13px 方块 + 1.05s steps(1) 闪烁 */
 .stream-cursor {
   display: inline-block;
-  width: 6px;
+  width: 7px;
   height: 13px;
   margin-left: 2px;
   vertical-align: text-bottom;
   background: currentColor;
   border-radius: 1px;
-  animation: stream-cursor-blink 1s steps(2, start) infinite;
+  animation: stream-cursor-blink 1.05s steps(1) infinite;
 }
 
 @keyframes stream-cursor-blink {
@@ -496,9 +474,10 @@ function handleImageError(event: Event) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
-  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
 }
 
 .turn-ai--running {
@@ -535,22 +514,23 @@ function handleImageError(event: Event) {
   max-height: 360px;
   width: auto;
   height: auto;
-  border-radius: 12px;
+  border-radius: var(--radius-surface);
   border: 1px solid var(--color-border-subtle);
   box-shadow: var(--shadow-sm);
   object-fit: contain;
   cursor: pointer;
-  transition: transform var(--duration-fast) ease;
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
 
+/* Marvis：hover 改「状态」而非做装饰性位移 */
 .ai-image:hover {
-  transform: scale(1.02);
+  border-color: var(--color-border-strong);
 }
 
 .ai-video {
   max-width: min(360px, 100%);
   max-height: 360px;
-  border-radius: 12px;
+  border-radius: var(--radius-surface);
   border: 1px solid var(--color-border-subtle);
   display: block;
   background: var(--color-surface-subtle);
@@ -560,9 +540,11 @@ function handleImageError(event: Event) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
-  color: var(--color-text-tertiary);
   margin-top: 8px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
 }
 
 .conv-tokens-break {
@@ -588,8 +570,8 @@ function handleImageError(event: Event) {
 .turn-enter-active,
 .turn-leave-active {
   transition:
-    opacity 200ms ease,
-    transform 200ms ease;
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
 }
 
 .turn-enter-from {

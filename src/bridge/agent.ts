@@ -249,6 +249,12 @@ const renameConversationRequestSchema = z
   })
   .strict();
 
+const clearConversationRequestSchema = z
+  .object({
+    id: z.uuid("会话标识无效。"),
+  })
+  .strict();
+
 const listMessagesRequestSchema = z
   .object({
     conversationId: z.uuid("会话标识无效。"),
@@ -354,6 +360,16 @@ export async function deleteConversation(id: string): Promise<void> {
 export async function renameConversation(id: string, title: string): Promise<ConversationRecord> {
   const request = parseRequest(renameConversationRequestSchema, { id, title }, "会话信息无效。");
   return invokeNative("agent_v1_rename_conversation", conversationRecordSchema, { request });
+}
+
+/**
+ * 清空会话的消息记录（保留会话本身）。
+ *
+ * 与 deleteConversation 的区别：会话仍在历史里，只是消息被清空。
+ */
+export async function clearConversation(id: string): Promise<void> {
+  const request = parseRequest(clearConversationRequestSchema, { id }, "会话标识无效。");
+  await invokeNative("agent_v1_clear_conversation", z.union([z.void(), z.null()]), { request });
 }
 
 /**

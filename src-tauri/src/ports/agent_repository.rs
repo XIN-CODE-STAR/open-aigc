@@ -60,6 +60,13 @@ pub trait AgentRepository: Send {
 
     fn delete_conversation(&mut self, conversation_id: &str) -> Result<(), AgentRepositoryError>;
 
+    /// 清空会话的消息记录，但**保留会话本身**。
+    ///
+    /// 删除该会话的全部消息、工具调用与执行计划，并把会话的循环状态重置为空。
+    /// 与 `delete_conversation` 的区别：会话记录仍在，标题/凭据/创建时间不变。
+    /// 「清空对话」必须走这里而不是「新建会话」，否则历史里会凭空多出一条空会话。
+    fn clear_conversation(&mut self, conversation_id: &str) -> Result<(), AgentRepositoryError>;
+
     fn append_message(
         &mut self,
         draft: MessageDraft,

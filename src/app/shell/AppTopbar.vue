@@ -68,28 +68,26 @@ const title = computed(() => String(route.meta.title ?? "OPEN AIGC"));
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-control);
+  border: none;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
+    color var(--duration-fast) var(--ease-out);
 }
 
 .topbar__canvas-btn:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-fg-soft);
   color: var(--color-text);
 }
 
 .topbar__canvas-btn.is-active {
   background: var(--color-accent-soft);
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 </style>

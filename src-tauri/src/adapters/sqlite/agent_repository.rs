@@ -240,6 +240,65 @@ impl AgentRepository for SqliteAgentRepository {
         Ok(())
     }
 
+    fn clear_conversation(&mut self, conversation_id: &str) -> Result<(), AgentRepositoryError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|e| PersistenceError::new("begin conversation clear transaction", e))?;
+        // 先确认会话存在：对不存在的会话"清空成功"会掩盖调用方的问题。
+        let exists: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM agent_conversations WHERE id = ?1",
+                params![conversation_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| PersistenceError::new("check conversation before clear", e))?;
+        if exists == 0 {
+            return Err(AgentRepositoryError::ConversationNotFound(
+                conversation_id.to_owned(),
+            ));
+        }
+        // 顺序：工具调用（引用消息与会话）→ 消息 → 执行计划。
+        transaction
+            .execute(
+                "DELETE FROM agent_tool_invocations WHERE conversation_id = ?1",
+                params![conversation_id],
+            )
+            .map_err(|e| PersistenceError::new("clear conversation invocations", e))?;
+        // 消息间有 parent_message_id 自引用，先解引用再整体删除，
+        // 否则开启外键校验时批量删除会因"父行先被删"而失败。
+        transaction
+            .execute(
+                "UPDATE agent_messages SET parent_message_id = NULL WHERE conversation_id = ?1",
+                params![conversation_id],
+            )
+            .map_err(|e| PersistenceError::new("detach cleared message parents", e))?;
+        transaction
+            .execute(
+                "DELETE FROM agent_messages WHERE conversation_id = ?1",
+                params![conversation_id],
+            )
+            .map_err(|e| PersistenceError::new("clear conversation messages", e))?;
+        transaction
+            .execute(
+                "DELETE FROM agent_plans WHERE conversation_id = ?1",
+                params![conversation_id],
+            )
+            .map_err(|e| PersistenceError::new("clear conversation plans", e))?;
+        // 循环状态（ask_user_question 的中断/恢复）随消息一并失效。
+        // 刻意不动 updated_at：清空不应让这条空会话跳到历史列表顶部。
+        transaction
+            .execute(
+                "UPDATE agent_conversations SET loop_state_json = NULL WHERE id = ?1",
+                params![conversation_id],
+            )
+            .map_err(|e| PersistenceError::new("reset conversation loop state", e))?;
+        transaction
+            .commit()
+            .map_err(|e| PersistenceError::new("commit conversation clear", e))?;
+        Ok(())
+    }
+
     fn append_message(
         &mut self,
         draft: MessageDraft,
@@ -774,6 +833,52 @@ mod tests {
             .unwrap();
         repo.delete_conversation(&conversation.id).unwrap();
         assert!(repo.get_conversation(&conversation.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn clears_messages_but_keeps_conversation() {
+        let (_dir, mut repo, workspace_id, credential_id) = seed();
+        let conversation = repo
+            .create_conversation(
+                ConversationDraft::try_new(
+                    workspace_id,
+                    "清空测试".to_owned(),
+                    credential_id,
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let message = repo
+            .append_message(MessageDraft::user(conversation.id.clone(), "hi".to_owned()).unwrap())
+            .unwrap();
+        repo.create_invocation(
+            ToolInvocationDraft::try_new(
+                message.id.clone(),
+                conversation.id.clone(),
+                "current_time".to_owned(),
+                "{}".to_owned(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        repo.clear_conversation(&conversation.id).unwrap();
+
+        // 会话记录保留，但消息与工具调用被清空。
+        assert!(repo.get_conversation(&conversation.id).unwrap().is_some());
+        assert!(repo.list_messages(&conversation.id).unwrap().is_empty());
+        assert!(repo.list_invocations(&conversation.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn clear_conversation_rejects_missing_conversation() {
+        let (_dir, mut repo, _workspace_id, _credential_id) = seed();
+        let error = repo.clear_conversation(SAMPLE_UUID).unwrap_err();
+        assert!(matches!(
+            error,
+            AgentRepositoryError::ConversationNotFound(_)
+        ));
     }
 
     #[test]

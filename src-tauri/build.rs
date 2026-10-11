@@ -41,6 +41,7 @@ fn main() {
             "agent_v1_list_conversations",
             "agent_v1_get_conversation",
             "agent_v1_delete_conversation",
+            "agent_v1_clear_conversation",
             "agent_v1_rename_conversation",
             "agent_v1_list_messages",
             "agent_v1_list_invocations",

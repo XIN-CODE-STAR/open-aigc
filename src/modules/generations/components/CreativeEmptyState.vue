@@ -326,9 +326,9 @@ function pickExample(example: ExamplePrompt): void {
   gap: var(--space-3);
   margin: 0;
   font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: var(--text-title-1);
+  font-weight: 600;
+  letter-spacing: -0.018em;
   color: var(--color-text);
 }
 
@@ -343,7 +343,8 @@ function pickExample(example: ExamplePrompt): void {
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 780px;
+  /* 与创作器（720px）对齐，欢迎页与会话页切换时输入框不跳位 */
+  max-width: 720px;
   gap: 6px;
 }
 
@@ -362,9 +363,9 @@ function pickExample(example: ExamplePrompt): void {
   gap: 4px;
   height: 24px;
   padding: 0 var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: transparent;
   color: var(--color-text-secondary);
   font-size: 12px;
   cursor: pointer;
@@ -375,7 +376,7 @@ function pickExample(example: ExamplePrompt): void {
 }
 
 .welcome__resource-btn:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-fg-soft);
   border-color: var(--color-border);
   color: var(--color-text);
 }
@@ -497,20 +498,21 @@ function pickExample(example: ExamplePrompt): void {
   display: flex;
   align-items: center;
   width: 100%;
-  max-width: 780px;
+  max-width: 720px;
   min-height: 52px;
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
   gap: var(--space-2);
   border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-surface);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   transition:
-    border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out);
+    border-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
 }
 
 .welcome__prompt:focus-within {
-  border-color: var(--color-border);
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
 }
 
 .welcome__prompt.is-dragover {
@@ -544,30 +546,28 @@ function pickExample(example: ExamplePrompt): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
   border: none;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   background: var(--color-accent);
   color: var(--color-on-accent);
   cursor: pointer;
-  transition:
-    opacity var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast) var(--ease-out);
 }
 
 .welcome__send-btn:hover:not(:disabled) {
-  opacity: 0.85;
-  transform: scale(1.05);
+  background: var(--color-accent-hover);
 }
 
 .welcome__send-btn:active:not(:disabled) {
-  transform: scale(0.95);
+  background: var(--color-accent-pressed);
+  transform: scale(0.97);
 }
 
 .welcome__send-btn:disabled {
-  background: var(--color-surface-hover);
+  background: var(--color-fg-soft);
   color: var(--color-text-disabled);
   cursor: not-allowed;
 }
@@ -628,8 +628,8 @@ function pickExample(example: ExamplePrompt): void {
 }
 
 .welcome__card:hover {
-  border-color: var(--color-border);
-  box-shadow: var(--shadow-sm);
+  background: var(--color-fg-soft);
+  border-color: var(--color-border-strong);
 }
 
 .welcome__card-icon {
@@ -640,7 +640,7 @@ function pickExample(example: ExamplePrompt): void {
   height: 28px;
   border-radius: var(--radius-control);
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   margin-bottom: var(--space-1);
 }
 

@@ -200,9 +200,11 @@ const noteColor = computed(() => {
 const rootStyle = computed(() => {
   const style: Record<string, string> = {};
   if (isNote.value) {
+    // Industrial：取消方向性色偏渐变，改为极轻的平铺色染 + 横向扫描线纹理。
+    // 色染层必须放在最后一层（CSS 背景简写中颜色只能出现在末尾）。
     style.background = [
-      `linear-gradient(165deg, color-mix(in srgb, ${noteColor.value} 20%, var(--color-surface-subtle)), var(--color-surface-subtle) 72%)`,
-      "repeating-linear-gradient(0deg, rgb(255 255 255 / 2.5%) 0 1px, transparent 1px 3px)",
+      "repeating-linear-gradient(0deg, rgb(0 0 0 / 3.5%) 0 1px, transparent 1px 4px)",
+      `color-mix(in srgb, ${noteColor.value} 9%, var(--color-surface-subtle))`,
     ].join(", ");
   }
   return style;

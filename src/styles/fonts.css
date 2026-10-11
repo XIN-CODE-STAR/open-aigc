@@ -1,0 +1,26 @@
+/*
+ * 本地字体（离线优先：不使用任何 CDN，随应用打包）。
+ *
+ * 对齐 Marvis 设计规范 §3 Typography：
+ * - Outfit（OFL-1.1）          界面与正文（Marvis 的真实 UI 字体）
+ * - JetBrains Mono（OFL-1.1）  数字 / 编号 / eyebrow / 元数据
+ *
+ * 仅含拉丁子集（合计约 72 KB）；中文由字体栈回退系统字体
+ * （微软雅黑 UI / PingFang SC），因此中文观感不受影响、体积可控。
+ */
+
+@font-face {
+  font-family: "Outfit Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/outfit-latin-var.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("../assets/fonts/jetbrains-mono-latin-var.woff2") format("woff2");
+}

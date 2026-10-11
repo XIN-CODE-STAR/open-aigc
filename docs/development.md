@@ -120,7 +120,6 @@ select count(*) from agent_tool_invocations where conversation_id = '<conv>';
 | Zod 4 | 在 WebView 边界验证 IPC 请求、响应和结构化错误 |
 | TanStack Table | 页面级排序和表格状态；无样式，不拥有领域数据或全局缓存 |
 | Vue Flow | 无限画布的节点/连线渲染与交互，配合自研持久化与语义检索 |
-| OGL | 轻量 WebGL 渲染，用于创意工坊背景光效 |
 | Tauri 2 | Windows 宿主、安全 capability 和 Rust 原生边界 |
 | Rusqlite + bundled SQLite | Rust 内部的本地领域数据访问，不向 WebView 暴露 SQL |
 | Refinery | 嵌入不可变 SQL migration，记录 checksum 并检测漂移 |
