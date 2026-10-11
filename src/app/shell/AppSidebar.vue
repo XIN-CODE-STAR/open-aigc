@@ -307,6 +307,22 @@ const localStatus = computed(() => {
   background: var(--color-accent-pressed);
 }
 
+/* 暗色下大面积纯白填充刺眼 → 改「安静药丸」：微白底 + 发丝线 + 白字 */
+:root[data-theme="dark"] .new-conversation-btn {
+  color: var(--color-text);
+  background: var(--color-fg-soft);
+  border: 1px solid var(--color-border);
+}
+
+:root[data-theme="dark"] .new-conversation-btn:hover {
+  background: color-mix(in oklab, oklch(0.96 0 0) 14%, transparent);
+  border-color: var(--color-border-strong);
+}
+
+:root[data-theme="dark"] .new-conversation-btn:active {
+  background: color-mix(in oklab, oklch(0.96 0 0) 18%, transparent);
+}
+
 .new-conversation-btn svg {
   flex: 0 0 15px;
 }

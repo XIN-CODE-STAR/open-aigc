@@ -681,7 +681,7 @@ async function exportCanvasPng(): Promise<void> {
     await new Promise((r) => setTimeout(r, 320));
     const { toPng } = await import("html-to-image");
     const dataUrl = await toPng(viewport, {
-      backgroundColor: "#0d1220",
+      backgroundColor: "#111111",
       pixelRatio: 2,
     });
     const anchor = document.createElement("a");
@@ -1336,7 +1336,7 @@ function getNodeColor(type: string | undefined): string {
 /* vue-flow 控件/选区/选中连线 暗色适配 */
 .memory-canvas-panel .vue-flow__controls {
   border: 1px solid rgb(255 255 255 / 8%);
-  background: rgb(15 20 32 / 72%);
+  background: rgb(20 20 20 / 72%);
   backdrop-filter: blur(12px);
   border-radius: 10px;
   overflow: hidden;
@@ -1467,7 +1467,7 @@ function getNodeColor(type: string | undefined): string {
   padding: 8px;
   border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 12px;
-  background: rgb(13 18 30 / 85%);
+  background: rgb(17 17 17 / 85%);
   backdrop-filter: blur(14px);
   box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
   overflow-y: auto;
@@ -1535,7 +1535,7 @@ function getNodeColor(type: string | undefined): string {
   padding: 8px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
-  background: rgb(13 18 30 / 92%);
+  background: rgb(17 17 17 / 92%);
   backdrop-filter: blur(12px);
   box-shadow: 0 10px 28px rgb(0 0 0 / 45%);
 }
@@ -1651,7 +1651,7 @@ function getNodeColor(type: string | undefined): string {
   justify-content: center;
   gap: var(--space-2);
   color: var(--color-text-tertiary);
-  background: rgb(10 14 22 / 45%);
+  background: rgb(12 12 12 / 45%);
   pointer-events: none;
 }
 
@@ -1743,7 +1743,7 @@ function getNodeColor(type: string | undefined): string {
   height: 112px;
   border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 10px;
-  background: rgb(15 20 32 / 72%);
+  background: rgb(20 20 20 / 72%);
   box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
   backdrop-filter: blur(10px);
   overflow: hidden;
@@ -1881,7 +1881,7 @@ function getNodeColor(type: string | undefined): string {
   justify-content: center;
   gap: var(--space-2);
   color: #f87171;
-  background: rgb(10 14 22 / 72%);
+  background: rgb(12 12 12 / 72%);
   backdrop-filter: blur(4px);
 }
 .canvas-error-overlay__message {

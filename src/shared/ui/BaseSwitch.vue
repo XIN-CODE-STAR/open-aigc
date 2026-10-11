@@ -54,7 +54,7 @@ withDefaults(defineProps<{ disabled?: boolean; title?: string }>(), {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--color-on-accent);
   box-shadow: var(--shadow-sm);
   transition: transform var(--duration-fast) var(--ease-out);
 }

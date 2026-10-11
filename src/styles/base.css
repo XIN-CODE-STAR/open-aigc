@@ -259,3 +259,34 @@ input:disabled {
 .prompt-input::placeholder {
   color: var(--color-text-tertiary);
 }
+
+/* ═══════════════════════════════════════════════
+   暗色主题：大面积主色填充 → 「安静药丸」
+   小元素（开关/滑块/进度条/激活标签/发送圆钮）保持白色点缀；
+   仅把整宽/对话框级的主按钮降为微白底 + 发丝线 + 白字，
+   避免深色界面里出现刺眼的大块纯白。
+   （:root 前缀提高特异性，可覆盖各组件 scoped 样式）
+   ═══════════════════════════════════════════════ */
+
+:root[data-theme="dark"] .base-btn--primary,
+:root[data-theme="dark"] .primary-button,
+:root[data-theme="dark"] .btn--accent,
+:root[data-theme="dark"] .btn--primary,
+:root[data-theme="dark"] .plugins-btn--primary,
+:root[data-theme="dark"] .form-save,
+:root[data-theme="dark"] .canvas-error-overlay__retry {
+  color: var(--color-text);
+  background: var(--color-fg-soft);
+  border: 1px solid var(--color-border);
+}
+
+:root[data-theme="dark"] .base-btn--primary:hover:not(:disabled),
+:root[data-theme="dark"] .primary-button:hover:not(:disabled),
+:root[data-theme="dark"] .btn--accent:hover:not(:disabled),
+:root[data-theme="dark"] .btn--primary:hover:not(:disabled),
+:root[data-theme="dark"] .plugins-btn--primary:hover:not(:disabled),
+:root[data-theme="dark"] .form-save:hover:not(:disabled),
+:root[data-theme="dark"] .canvas-error-overlay__retry:hover:not(:disabled) {
+  background: color-mix(in oklab, oklch(0.96 0 0) 14%, transparent);
+  border-color: var(--color-border-strong);
+}

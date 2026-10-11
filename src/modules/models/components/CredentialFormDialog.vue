@@ -565,7 +565,7 @@ watch(
 .btn--accent {
   height: 32px;
   padding: 0 var(--space-4);
-  color: #fff;
+  color: var(--color-on-accent);
   border: none;
   border-radius: var(--radius-control);
   background: var(--color-accent);

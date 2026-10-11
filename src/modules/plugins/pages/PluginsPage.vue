@@ -763,7 +763,7 @@ onMounted(() => {
 }
 
 .plugins-tab.is-active {
-  color: #fff;
+  color: var(--color-on-accent);
   background: var(--color-accent);
 }
 
@@ -837,13 +837,13 @@ textarea.plugins-input {
 }
 
 .plugins-btn--primary {
-  color: #fff;
+  color: var(--color-on-accent);
   background: var(--color-accent);
   border-color: transparent;
 }
 
 .plugins-btn--primary:hover:not(:disabled) {
-  color: #fff;
+  color: var(--color-on-accent);
   filter: brightness(1.08);
   background: var(--color-accent);
 }

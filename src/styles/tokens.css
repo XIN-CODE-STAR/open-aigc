@@ -171,49 +171,50 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* —— 色彩 · 暗色 · 冷调石板（板岩色保持不变） —— */
-  --color-canvas: oklch(0.185 0.012 237);
-  --color-surface: oklch(0.245 0.016 237);
-  --color-surface-subtle: oklch(0.275 0.014 237);
-  --color-surface-hover: color-mix(in oklab, oklch(0.93 0.006 230) 8%, transparent);
-  --color-surface-selected: color-mix(in oklab, #3a7294 26%, transparent);
+  /* —— 色彩 · 暗色 · 纯黑灰阶（零色相，白色作唯一点缀） —— */
+  --color-canvas: oklch(0.145 0 0);
+  --color-surface: oklch(0.205 0 0);
+  --color-surface-subtle: oklch(0.25 0 0);
+  --color-surface-hover: color-mix(in oklab, oklch(0.96 0 0) 8%, transparent);
+  --color-surface-selected: color-mix(in oklab, oklch(0.96 0 0) 16%, transparent);
 
-  --color-border: color-mix(in oklab, oklch(0.93 0.006 230) 18%, transparent);
-  --color-border-subtle: color-mix(in oklab, oklch(0.93 0.006 230) 10%, transparent);
-  --color-border-strong: color-mix(in oklab, oklch(0.93 0.006 230) 32%, transparent);
+  --color-border: color-mix(in oklab, oklch(0.96 0 0) 16%, transparent);
+  --color-border-subtle: color-mix(in oklab, oklch(0.96 0 0) 8%, transparent);
+  --color-border-strong: color-mix(in oklab, oklch(0.96 0 0) 30%, transparent);
 
-  --color-text: oklch(0.93 0.006 230);
-  --color-text-secondary: oklch(0.7 0.02 230);
-  --color-text-tertiary: oklch(0.58 0.018 230);
-  --color-text-disabled: oklch(0.46 0.014 230);
-  --color-fg-2: oklch(0.84 0.01 230);
-  --color-fg-soft: color-mix(in oklab, oklch(0.93 0.006 230) 8%, transparent);
-  --color-input-well: color-mix(in oklab, oklch(0.93 0.006 230) 7%, transparent);
+  --color-text: oklch(0.96 0 0);
+  --color-text-secondary: oklch(0.72 0 0);
+  --color-text-tertiary: oklch(0.56 0 0);
+  --color-text-disabled: oklch(0.42 0 0);
+  --color-fg-2: oklch(0.85 0 0);
+  --color-fg-soft: color-mix(in oklab, oklch(0.96 0 0) 8%, transparent);
+  --color-input-well: color-mix(in oklab, oklch(0.96 0 0) 7%, transparent);
 
-  /* 板岩色不变；暗色下软色/文字档加强 */
-  --color-accent: #3a7294;
-  --color-accent-hover: color-mix(in oklab, #3a7294 88%, white 12%);
-  --color-accent-pressed: color-mix(in oklab, #3a7294 78%, black 22%);
-  --color-accent-soft: color-mix(in oklab, #3a7294 26%, transparent);
-  --color-accent-text: color-mix(in oklab, #3a7294 55%, white);
-  --color-on-accent: oklch(0.97 0.008 237);
+  /* 暗色下主操作就是「白」：白底黑字，界面保持纯灰阶 */
+  --color-accent: oklch(0.96 0 0);
+  --color-accent-hover: oklch(0.88 0 0);
+  --color-accent-pressed: oklch(0.8 0 0);
+  --color-accent-soft: color-mix(in oklab, oklch(0.96 0 0) 16%, transparent);
+  --color-accent-text: oklch(0.96 0 0);
+  --color-on-accent: oklch(0.15 0 0);
 
-  --color-success: oklch(0.72 0.11 155);
-  --color-warning: oklch(0.78 0.12 75);
-  --color-danger: color-mix(in oklab, oklch(0.577 0.245 27.3) 75%, white);
-  --color-on-danger: oklch(0.22 0.06 27);
-  --color-focus: #3a7294;
+  /* 语义色保留但压低饱和，避免在灰阶里跳 */
+  --color-success: oklch(0.72 0.08 155);
+  --color-warning: oklch(0.78 0.09 75);
+  --color-danger: color-mix(in oklab, oklch(0.577 0.2 27.3) 72%, white);
+  --color-on-danger: oklch(0.18 0 0);
+  --color-focus: oklch(0.96 0 0);
 
-  --color-success-soft: color-mix(in oklab, oklch(0.72 0.11 155) 18%, transparent);
-  --color-warning-soft: color-mix(in oklab, oklch(0.78 0.12 75) 18%, transparent);
-  --color-danger-soft: color-mix(in oklab, oklch(0.577 0.245 27.3) 22%, transparent);
+  --color-success-soft: color-mix(in oklab, oklch(0.72 0.08 155) 14%, transparent);
+  --color-warning-soft: color-mix(in oklab, oklch(0.78 0.09 75) 14%, transparent);
+  --color-danger-soft: color-mix(in oklab, oklch(0.577 0.2 27.3) 16%, transparent);
 
   --color-overlay: rgba(0, 0, 0, 0.6);
 
-  /* —— 材质 · 暗色磨砂 —— */
-  --material-sidebar: color-mix(in oklab, oklch(0.185 0.012 237) 88%, transparent);
-  --material-topbar: color-mix(in oklab, oklch(0.185 0.012 237) 88%, transparent);
-  --material-sheet: color-mix(in oklab, oklch(0.245 0.016 237) 92%, transparent);
+  /* —— 材质 · 暗色磨砂（中性黑基底） —— */
+  --material-sidebar: color-mix(in oklab, oklch(0.145 0 0) 88%, transparent);
+  --material-topbar: color-mix(in oklab, oklch(0.145 0 0) 88%, transparent);
+  --material-sheet: color-mix(in oklab, oklch(0.205 0 0) 92%, transparent);
 
   /* —— 阴影 · 暗色（黑基底，更深） —— */
   --shadow-sm: 0 1px 2px -1px rgba(0, 0, 0, 0.5);
