@@ -27,10 +27,12 @@ import appIconUrl from "../../../assets/app-icon.svg";
 import { usePreferencesStore } from "../stores/preferences";
 import { useProjectDirectory } from "../stores/projectDirectory";
 import { useWorkspaceStore } from "../stores/workspace";
+import { useShellActionsStore } from "../stores/shellActions";
 
 const preferences = usePreferencesStore();
 const workspace = useWorkspaceStore();
 const projectDir = useProjectDirectory();
+const shellActions = useShellActionsStore();
 
 const expanded = computed(() => preferences.navigationExpanded);
 
@@ -106,6 +108,7 @@ const localStatus = computed(() => {
         class="new-conversation-btn"
         to="/generations"
         :title="expanded ? undefined : '新建对话'"
+        @click="shellActions.requestNewConversation()"
       >
         <Plus :size="15" :stroke-width="2" />
         <span>新建对话</span>
@@ -287,10 +290,10 @@ const localStatus = computed(() => {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  color: var(--color-on-accent);
+  color: var(--color-accent-text);
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-soft);
   font-family: var(--font-sans);
   font-size: var(--text-subhead);
   font-weight: var(--font-weight-semibold);
@@ -300,14 +303,14 @@ const localStatus = computed(() => {
 }
 
 .new-conversation-btn:hover {
-  background: var(--color-accent-hover);
+  background: color-mix(in oklab, var(--color-accent) 22%, transparent);
 }
 
 .new-conversation-btn:active {
-  background: var(--color-accent-pressed);
+  background: color-mix(in oklab, var(--color-accent) 30%, transparent);
 }
 
-/* 暗色下大面积纯白填充刺眼 → 改「安静药丸」：微白底 + 发丝线 + 白字 */
+/* 暗色下大面积纯白填充刺眼 → 保持「安静药丸」：微白底 + 发丝线 + 白字 */
 :root[data-theme="dark"] .new-conversation-btn {
   color: var(--color-text);
   background: var(--color-fg-soft);

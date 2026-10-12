@@ -46,6 +46,7 @@ import MemoryCanvasPanel from "../../../modules/memory/components/MemoryCanvasPa
 import { queueV1SubmitAttempt } from "../../../bridge/queue";
 import { useProjectDirectory } from "../../../app/stores/projectDirectory";
 import { useMemoryCanvasStore } from "../../../app/stores/memoryCanvas";
+import { useShellActionsStore } from "../../../app/stores/shellActions";
 import type { AttachmentInput } from "../../../bridge/agent";
 import { analyzeImage } from "../../../bridge/imageAnalyzer";
 import { useSemanticAnalysis } from "../composables/useSemanticAnalysis";
@@ -224,6 +225,7 @@ const referenceImages = ref<
 >([]);
 const showPreferences = ref(false);
 const memoryCanvas = useMemoryCanvasStore();
+const shellActions = useShellActionsStore();
 const memoryCanvasRef = ref<InstanceType<typeof MemoryCanvasPanel> | null>(null);
 const showModeMenu = ref(false);
 const modeMenuRef = ref<HTMLElement | null>(null);
@@ -1238,6 +1240,14 @@ function startNewAgentConversation(): void {
   nextTick(() => scrollToBottom());
 }
 
+// 侧栏「新建对话」→ shell 动作总线 → 回到欢迎页空状态（同路由下 RouterLink 不会重触发，靠 tick 通知）
+watch(
+  () => shellActions.newConversationTick,
+  (tick) => {
+    if (tick > 0) startNewAgentConversation();
+  },
+);
+
 /* ──────────────────────────────────────────────
  *  清空对话：删除消息、保留会话
  * ────────────────────────────────────────────── */
@@ -1767,7 +1777,7 @@ function formatTime(iso: string): string {
 }
 .grok-conversation :deep(.composer-box.composer-box) {
   pointer-events: auto;
-  background: var(--material-sheet);
+  background: color-mix(in oklab, var(--color-surface) 65%, transparent);
   backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
   -webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
   border: 1px solid var(--color-border-subtle);

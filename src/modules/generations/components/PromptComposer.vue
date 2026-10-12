@@ -404,7 +404,8 @@ onBeforeUnmount(() => {
   position: relative;
   max-width: 720px;
   margin: 0 auto;
-  background: var(--material-sheet);
+  /* 半透明毛玻璃：65% 表面色 + 背景模糊 */
+  background: color-mix(in oklab, var(--color-surface) 65%, transparent);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-panel);
   padding: 14px;
@@ -415,12 +416,6 @@ onBeforeUnmount(() => {
   transition:
     border-color var(--duration-base) var(--ease-out),
     box-shadow var(--duration-base) var(--ease-out);
-}
-
-/* 聚焦：Marvis 规范——accent 边框 + focus ring，不做「更深阴影」 */
-.composer-box:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
 }
 
 /* ─── 模式芯片行 ─── */
@@ -502,10 +497,15 @@ onBeforeUnmount(() => {
   color: var(--color-text-tertiary);
 }
 
+/* 聚焦不加描边（用户偏好）：外层盒与内层输入均保持安静，光标即焦点指示 */
 .prompt-input:focus {
-  background: var(--color-surface);
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
+  outline: none;
+  box-shadow: none;
+}
+
+.prompt-input:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .composer-box.is-dragover {

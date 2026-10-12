@@ -504,15 +504,13 @@ function pickExample(example: ExamplePrompt): void {
   gap: var(--space-2);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-panel);
-  background: var(--color-surface);
+  /* 半透明毛玻璃：65% 表面色 + 背景模糊（水印可透出） */
+  background: color-mix(in oklab, var(--color-surface) 65%, transparent);
+  backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+  -webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
   transition:
     border-color var(--duration-base) var(--ease-out),
     box-shadow var(--duration-base) var(--ease-out);
-}
-
-.welcome__prompt:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
 }
 
 .welcome__prompt.is-dragover {
@@ -539,6 +537,13 @@ function pickExample(example: ExamplePrompt): void {
 
 .welcome__input::placeholder {
   color: var(--color-text-tertiary);
+}
+
+/* 聚焦不加描边（与 PromptComposer 一致）：光标即焦点指示 */
+.welcome__input:focus,
+.welcome__input:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 /* —— 发送按钮 —— */
