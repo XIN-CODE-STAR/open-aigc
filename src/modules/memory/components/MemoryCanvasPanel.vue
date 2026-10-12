@@ -48,6 +48,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useToast } from "../../../shared/ui/useToast";
 import CanvasNodeCard from "./CanvasNodeCard.vue";
 import CanvasContextMenu from "./CanvasContextMenu.vue";
+import BrandWatermark from "../../../shared/ui/BrandWatermark.vue";
 import type { CanvasMenuItem } from "./CanvasContextMenu.vue";
 import type { MemoryNode } from "../../../bridge/memoryCanvas";
 import { getEffectiveSize } from "../canvasNodeSize";
@@ -908,6 +909,11 @@ defineExpose({
       @contextmenu="onCanvasContextMenu"
       @paste="onCanvasPaste"
     >
+      <!-- 品牌水印：Logo「A」层层递进（纯装饰，置于画布最底层，随主题令牌着色） -->
+      <div class="canvas-brand-field">
+        <BrandWatermark />
+      </div>
+
       <!-- Loading / 错误 / 空状态覆盖层 -->
       <!-- Loading -->
       <div v-if="loading" class="canvas-loading canvas-loading--overlay">
@@ -1927,8 +1933,20 @@ function getNodeColor(type: string | undefined): string {
   flex: 1;
   width: 100%;
   min-height: 0;
-  /* 画布底交给主题令牌，随亮/暗自动切换（原为写死的深蓝径向渐变） */
+  /* 画布底色由最底层的品牌水印层承担（令牌驱动）；
+     本层必须保持透明，否则不透明底会盖住水印 */
+  background: transparent;
+}
+
+/* ═══ 品牌水印宿主 ═══
+   置于画布最底层（DOM 首位），承担画布底色；水印本体见 BrandWatermark 组件。 */
+.canvas-brand-field {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
   background: var(--color-canvas);
+  pointer-events: none;
 }
 
 /* 小地图隐藏/显示按钮 */

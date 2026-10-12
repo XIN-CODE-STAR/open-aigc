@@ -20,6 +20,7 @@ import { listResourceAccounts, type ResourceAccountRecord } from "../../../bridg
 import { memoryV1Status } from "../../../bridge/memory";
 import { useToast } from "../../../shared/ui/useToast";
 import ModalDialog from "../../../shared/ui/ModalDialog.vue";
+import BrandWatermark from "../../../shared/ui/BrandWatermark.vue";
 import { useGenerationHistory } from "../composables/useGenerationHistory";
 import { useAgentConversation } from "../composables/useAgentConversation";
 import { isGenerationNodeTool } from "../generationNodeTools";
@@ -1344,6 +1345,10 @@ function formatTime(iso: string): string {
        创意工坊：工作台风格 · 顶部状态条 · 底部 Composer
        ═══════════════════════════════════════════════ -->
   <div class="grok-shell">
+    <!-- 品牌水印：仅空状态欢迎页展示（对话视图保持安静） -->
+    <div v-if="isEmpty" class="grok-watermark-host">
+      <BrandWatermark />
+    </div>
     <!-- ═══ 空状态：居中输入框欢迎页 ═══ -->
     <div v-if="isEmpty" class="grok-welcome">
       <CreativeEmptyState
@@ -1410,14 +1415,6 @@ function formatTime(iso: string): string {
           </div>
         </aside>
       </Transition>
-
-      <!-- 工作记忆画布面板 -->
-      <MemoryCanvasPanel
-        ref="memoryCanvasRef"
-        :conversation-id="agentConversation?.id ?? null"
-        :visible="memoryCanvas.visible"
-        @close="memoryCanvas.close()"
-      />
 
       <ConversationRail
         :agent-groups="conversationGroups"
@@ -1568,6 +1565,14 @@ function formatTime(iso: string): string {
         </button>
       </template>
     </ModalDialog>
+
+    <!-- 工作记忆画布面板（页面级覆盖层：欢迎页/会话页顶栏按钮均可开关） -->
+    <MemoryCanvasPanel
+      ref="memoryCanvasRef"
+      :conversation-id="agentConversation?.id ?? null"
+      :visible="memoryCanvas.visible"
+      @close="memoryCanvas.close()"
+    />
   </div>
 </template>
 
@@ -1582,6 +1587,8 @@ function formatTime(iso: string): string {
   overflow: hidden;
 }
 .grok-welcome {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1690,6 +1697,7 @@ function formatTime(iso: string): string {
   }
 }
 .grok-shell {
+  position: relative;
   height: calc(100vh - var(--topbar-height) - (var(--page-padding) * 2));
   min-height: 560px;
   border: 1px solid var(--color-border-subtle);
@@ -1698,6 +1706,16 @@ function formatTime(iso: string): string {
   background: var(--color-canvas);
   box-shadow: var(--shadow-sm);
   isolation: isolate;
+}
+
+/* 品牌水印宿主：铺满 shell，位于 welcome 内容之下 */
+.grok-watermark-host {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .grok-prefs {
