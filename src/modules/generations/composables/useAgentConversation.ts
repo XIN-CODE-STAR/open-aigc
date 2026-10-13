@@ -522,7 +522,12 @@ export function useAgentConversation() {
     clearError();
     try {
       const record = await createConversationIpc(input);
-      conversationWorkspaces.record(record.id, projectDir.workspaceName);
+      // 明确区分「打开了自定义目录」与「仍用默认区」：projectDir.workspaceName
+      // 在默认区下会返回 "OPEN AIGC"，而那也是合法的文件夹名，不能靠它判断。
+      conversationWorkspaces.record(
+        record.id,
+        projectDir.isCustom ? projectDir.workspaceName : null,
+      );
       conversations.value = [record, ...conversations.value];
       await selectConversation(record);
       return record;

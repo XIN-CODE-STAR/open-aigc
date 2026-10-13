@@ -15,7 +15,6 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useRouter } from "vue-router";
 import {
   ChevronRight,
-  Clock,
   Eraser,
   Folder,
   Info,
@@ -23,6 +22,7 @@ import {
   MessageSquareText,
   Pencil,
   Play,
+  Plus,
   RefreshCcw,
   Search,
   Trash2,
@@ -43,6 +43,8 @@ import {
 import EmptyState from "../../../shared/ui/EmptyState.vue";
 import { useToast } from "../../../shared/ui/useToast";
 import { useConversationWorkspaces } from "../../../app/composables/useConversationWorkspaces";
+import { useShellActionsStore } from "../../../app/stores/shellActions";
+import { formatDateTime, formatRelativeTime } from "../../../shared/utils/time";
 import {
   isVideoUrl,
   parseUserMessageContent,
@@ -52,6 +54,7 @@ import {
 const router = useRouter();
 const toast = useToast();
 const conversationWorkspaces = useConversationWorkspaces();
+const shellActions = useShellActionsStore();
 
 /** 默认分组名：未登记工作目录的对话归入应用自身。 */
 const DEFAULT_GROUP = "OPEN AIGC";
@@ -84,8 +87,16 @@ function groupLabel(conversation: ConversationRecord): string {
   return conversationWorkspaces.getWorkspaceName(conversation.id) ?? DEFAULT_GROUP;
 }
 
+/** 是否为「未归属任何工作目录」的对话（而非恰好叫该名字的真实空间）。 */
+function isLooseTask(conversation: ConversationRecord): boolean {
+  return conversationWorkspaces.getWorkspaceName(conversation.id) === null;
+}
+
 const workspaceOptions = computed<string[]>(() => {
   const set = new Set<string>();
+  // 只要有未分组任务，就提供「OPEN AIGC」选项，否则按空间筛选后
+  // 这一组会整体消失、连选项都没有。
+  if (conversations.value.some(isLooseTask)) set.add(DEFAULT_GROUP);
   for (const item of conversations.value) set.add(groupLabel(item));
   return [ALL_WORKSPACES, ...[...set].sort((a, b) => a.localeCompare(b))];
 });
@@ -111,8 +122,34 @@ const groups = computed(() => {
   return [...map.entries()].map(([label, items]) => ({ label, items }));
 });
 
-const hasConversations = computed(() => conversations.value.length > 0);
+/** 未归属任何工作空间的对话 → 顶部「任务」分组（对齐参考设计）。 */
+const looseTasks = computed<ConversationRecord[]>(() =>
+  [...conversations.value]
+    .filter(isLooseTask)
+    .filter((item) => {
+      if (workspaceFilter.value !== ALL_WORKSPACES && workspaceFilter.value !== DEFAULT_GROUP) {
+        return false;
+      }
+      const kw = keyword.value.trim().toLowerCase();
+      return !kw || item.title.toLowerCase().includes(kw);
+    })
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+);
+
+/** 已登记工作空间的对话 → 「空间」分组（目录行 + 缩进子项）。 */
+const spaceGroups = computed(() =>
+  groups.value.filter((group) => group.label !== DEFAULT_GROUP || !isLooseTaskGroup(group)),
+);
+
+/** 目录行「OPEN AIGC」是否真的对应一个已登记的真实空间（而非默认区）。 */
+function isLooseTaskGroup(group: { label: string; items: ConversationRecord[] }): boolean {
+  return group.label === DEFAULT_GROUP && group.items.every(isLooseTask);
+}
+
+/** 搜索/筛选后是否命中任何对话（两个分组合起来看）。 */
 const hasMatches = computed(() => groups.value.length > 0);
+
+const hasConversations = computed(() => conversations.value.length > 0);
 
 async function refresh(): Promise<void> {
   listPhase.value = "loading";
@@ -333,6 +370,12 @@ function cancelRename(): void {
   renamingId.value = null;
 }
 
+/** 新建任务：回到创意工坊并清空当前会话（经 shell 动作总线通知生成页）。 */
+function startNewTask(): void {
+  shellActions.requestNewConversation();
+  void router.push("/generations");
+}
+
 /* ──────────────────────────────────────────────
  *  工具函数
  * ────────────────────────────────────────────── */
@@ -373,19 +416,6 @@ function extractMedia(resultJson: string | null): { images: string[]; videos: st
   return { images, videos };
 }
 
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
-}
-
 onMounted(() => {
   void refresh();
 });
@@ -420,15 +450,15 @@ onMounted(() => {
     <div class="tasks__panes">
       <!-- ── 左列：历史对话列表 ── -->
       <section class="tasks__panel" aria-label="历史对话列表">
+        <button type="button" class="tasks__new" @click="startNewTask">
+          <Plus :size="15" :stroke-width="2" />
+          <span>新建任务</span>
+        </button>
+
         <div class="tasks__tools">
           <label class="tasks__search">
             <Search :size="14" :stroke-width="1.8" />
-            <input
-              v-model="keyword"
-              type="search"
-              placeholder="搜索对话标题"
-              aria-label="搜索对话标题"
-            />
+            <input v-model="keyword" type="search" placeholder="搜索任务" aria-label="搜索任务" />
             <button
               v-if="keyword"
               type="button"
@@ -441,7 +471,7 @@ onMounted(() => {
           </label>
           <select v-model="workspaceFilter" class="tasks__filter" aria-label="按工作目录筛选">
             <option v-for="option in workspaceOptions" :key="option" :value="option">
-              {{ option === ALL_WORKSPACES ? "全部目录" : option }}
+              {{ option === ALL_WORKSPACES ? "全部空间" : option }}
             </option>
           </select>
         </div>
@@ -461,16 +491,15 @@ onMounted(() => {
           </div>
           <div v-else-if="!hasMatches" class="tasks__list-hint">
             <Search :size="14" />
-            <span>没有匹配的对话</span>
+            <span>没有匹配的任务</span>
           </div>
 
-          <div v-for="group in groups" :key="group.label" class="tasks__group">
-            <h2 class="tasks__group-title">
-              <Folder :size="13" :stroke-width="1.8" />
-              <span>{{ group.label }}</span>
-              <span class="tasks__group-count">{{ group.items.length }}</span>
+          <!-- 任务：未归属空间的对话，扁平列表（标题 + 相对时间） -->
+          <section v-if="looseTasks.length" class="tasks__section">
+            <h2 class="tasks__section-title">
+              任务 <span class="tasks__section-count">({{ looseTasks.length }})</span>
             </h2>
-            <template v-for="item in group.items" :key="item.id">
+            <template v-for="item in looseTasks" :key="item.id">
               <div v-if="renamingId === item.id" class="tasks__item is-editing">
                 <input
                   :ref="bindRenameInput"
@@ -490,18 +519,56 @@ onMounted(() => {
                 type="button"
                 class="tasks__item"
                 :class="{ 'is-active': selectedId === item.id }"
-                :title="item.title"
+                :title="`${item.title} · ${formatDateTime(item.updatedAt)}`"
                 @click="select(item.id)"
                 @contextmenu="openMenu($event, item)"
               >
                 <span class="tasks__item-title">{{ item.title }}</span>
-                <span class="tasks__item-time">
-                  <Clock :size="11" :stroke-width="1.8" />
-                  {{ formatDateTime(item.updatedAt) }}
-                </span>
+                <span class="tasks__item-time">{{ formatRelativeTime(item.updatedAt) }}</span>
               </button>
             </template>
-          </div>
+          </section>
+
+          <!-- 空间：按工作目录分组，目录行 + 缩进子项 -->
+          <section v-if="spaceGroups.length" class="tasks__section">
+            <h2 class="tasks__section-title">
+              空间 <span class="tasks__section-count">({{ spaceGroups.length }})</span>
+            </h2>
+            <div v-for="group in spaceGroups" :key="group.label" class="tasks__space">
+              <div class="tasks__space-head">
+                <Folder :size="15" :stroke-width="1.8" />
+                <span class="tasks__space-name">{{ group.label }}</span>
+              </div>
+              <template v-for="item in group.items" :key="item.id">
+                <div v-if="renamingId === item.id" class="tasks__item is-editing is-child">
+                  <input
+                    :ref="bindRenameInput"
+                    v-model="renamingTitle"
+                    class="tasks__rename"
+                    type="text"
+                    maxlength="200"
+                    aria-label="重命名对话"
+                    @click.stop
+                    @keydown.enter.prevent="commitRename"
+                    @keydown.esc.prevent="cancelRename"
+                    @blur="commitRename"
+                  />
+                </div>
+                <button
+                  v-else
+                  type="button"
+                  class="tasks__item is-child"
+                  :class="{ 'is-active': selectedId === item.id }"
+                  :title="`${item.title} · ${formatDateTime(item.updatedAt)}`"
+                  @click="select(item.id)"
+                  @contextmenu="openMenu($event, item)"
+                >
+                  <span class="tasks__item-title">{{ item.title }}</span>
+                  <span class="tasks__item-time">{{ formatRelativeTime(item.updatedAt) }}</span>
+                </button>
+              </template>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -872,46 +939,97 @@ onMounted(() => {
   color: var(--color-danger);
 }
 
-.tasks__group {
+/* —— 新建任务（对齐参考设计：图标 + 文字的主操作条） —— */
+.tasks__new {
+  display: flex;
+  width: auto;
+  height: 34px;
+  margin: var(--space-2) var(--space-2) 0;
+  padding: 0 var(--space-3);
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-accent-text);
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-accent-soft);
+  font-family: inherit;
+  font-size: var(--text-footnote);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.tasks__new:hover {
+  background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+}
+
+.tasks__new:active {
+  background: color-mix(in oklab, var(--color-accent) 30%, transparent);
+}
+
+/* —— 分组：任务 / 空间 —— */
+.tasks__section {
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
-.tasks__group-title {
+.tasks__section + .tasks__section {
+  margin-top: var(--space-4);
+}
+
+.tasks__section-title {
   display: flex;
-  height: 26px;
-  margin: 0;
+  height: 28px;
+  margin: 0 0 var(--space-1);
+  padding: 0 var(--space-2);
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks__section-count {
+  color: var(--color-text-tertiary);
+}
+
+/* 空间：目录行 + 缩进子项 */
+.tasks__space {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tasks__space + .tasks__space {
+  margin-top: var(--space-2);
+}
+
+.tasks__space-head {
+  display: flex;
+  height: 32px;
   padding: 0 var(--space-2);
   align-items: center;
   gap: var(--space-2);
-  color: var(--color-text-tertiary);
-  font-size: var(--text-caption);
+  color: var(--color-text);
+  font-size: var(--text-footnote);
   font-weight: var(--font-weight-medium);
-  letter-spacing: 0.02em;
 }
 
-.tasks__group-title span:first-of-type {
+.tasks__space-name {
   min-width: 0;
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tasks__group-count {
-  flex: 0 0 auto;
-  color: var(--color-text-tertiary);
-}
-
 .tasks__item {
   display: flex;
   width: 100%;
-  min-height: 38px;
-  padding: var(--space-1) var(--space-2);
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
+  min-height: 34px;
+  padding: 0 var(--space-2);
+  align-items: center;
+  gap: var(--space-2);
   color: var(--color-text-secondary);
   border: none;
   border-radius: var(--radius-control);
@@ -922,6 +1040,11 @@ onMounted(() => {
   transition:
     background var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
+}
+
+/* 空间子项：相对目录行缩进 */
+.tasks__item.is-child {
+  padding-left: calc(var(--space-2) + 23px);
 }
 
 .tasks__item:hover {
@@ -937,6 +1060,7 @@ onMounted(() => {
 
 .tasks__item-title {
   min-width: 0;
+  flex: 1;
   overflow: hidden;
   font-size: var(--text-footnote);
   text-overflow: ellipsis;
@@ -944,12 +1068,11 @@ onMounted(() => {
 }
 
 .tasks__item-time {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  flex: 0 0 auto;
   color: var(--color-text-tertiary);
   font-size: 11px;
   font-weight: var(--font-weight-regular);
+  white-space: nowrap;
 }
 
 /* —— 右列：详情头 —— */

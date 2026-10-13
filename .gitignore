@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+# 早期安装失败留下的残缺副本（避免误提交）
+node_modules.broken.bak*/
+node_modules.broken*/
 
 # Build output
 dist/
@@ -76,6 +79,8 @@ scripts/_fix_indent.py
 students-template.xlsx
 scripts/generate-students-xlsx.mjs
 *_REPORT.md
+tools/_*.mjs
+tools/_*/
 
 # 旧 git 历史本地备份（发布时已重建干净历史）
 .git-history-backup/
