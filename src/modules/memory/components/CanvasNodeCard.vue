@@ -171,10 +171,15 @@ const showThumbnail = computed(() => {
   return (
     !props.data.compact &&
     thumbnailUrl.value &&
-    (props.data.nodeType === "image" || props.data.nodeType === "upload") &&
+    (props.data.nodeType === "image" ||
+      props.data.nodeType === "upload" ||
+      props.data.nodeType === "video") &&
     !thumbnailUrl.value.startsWith("pending://")
   );
 });
+
+/** 视频节点：用 <video> 渲染，图片节点用 <img>。 */
+const isVideoNode = computed(() => props.data.nodeType === "video");
 
 const TYPE_LABELS: Record<string, string> = {
   fact: "事实",
@@ -221,6 +226,11 @@ async function resolveDisplaySrc(): Promise<void> {
     displaySrc.value = null;
     return;
   }
+  // 视频直接用原地址交给 <video>，不走 canvas 缩略图（无法绘制视频帧）
+  if (props.data.nodeType === "video") {
+    displaySrc.value = null;
+    return;
+  }
   const result = await thumbnailFor(source, `${props.id}:${source.length}`);
   if (token === displaySrcToken) displaySrc.value = result;
 }
@@ -262,14 +272,25 @@ watch(
       </span>
     </div>
 
-    <!-- Thumbnail (for image/upload nodes with dataUrl) -->
+    <!-- Thumbnail (for image/upload/video nodes with dataUrl) -->
     <div
       v-if="showThumbnail"
       class="canvas-node__thumb"
       title="双击放大预览"
       @dblclick.stop="data.onPreview?.()"
     >
+      <video
+        v-if="isVideoNode"
+        :src="thumbnailUrl!"
+        class="canvas-node__video"
+        controls
+        muted
+        playsinline
+        preload="metadata"
+        @error="($event.target as HTMLVideoElement).style.display = 'none'"
+      />
       <img
+        v-else
         :src="displaySrc ?? thumbnailUrl!"
         alt=""
         loading="lazy"
@@ -467,6 +488,15 @@ watch(
   object-fit: cover;
   display: block;
   transition: transform 0.25s ease;
+}
+
+/* 视频节点：容器内直接播放（hover 不缩放，避免与控件交互冲突） */
+.canvas-node__thumb .canvas-node__video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #000;
 }
 /* 图片节点 hover 缩放微动画 */
 .canvas-node:hover .canvas-node__thumb img {

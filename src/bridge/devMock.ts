@@ -40,11 +40,133 @@ const MSG_1 = "55555555-5555-4555-8555-555555555501";
 const MSG_2 = "55555555-5555-4555-8555-555555555502";
 const MSG_3 = "55555555-5555-4555-8555-555555555503";
 const INV_1 = "66666666-6666-4666-8666-666666666601";
+
+/** dev 预览用的公开示例视频（CC0）：让画布/资产的视频链路可见。 */
+const SAMPLE_VIDEO_URL = "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
 const ASSET_A = "77777777-7777-4777-8777-777777777701";
 const ASSET_B = "77777777-7777-4777-8777-777777777702";
 const ASSET_C = "77777777-7777-4777-8777-777777777703";
 const ASSET_D = "77777777-7777-4777-8777-777777777704";
 const ASSET_E = "77777777-7777-4777-8777-777777777705";
+
+/* ──────────────────────────────────────────────
+ *  画布（memory canvas）——内存态 mock
+ *  浏览器预览没有真实 IPC，这里把画布/节点/连线/视口保存在模块内存，
+ *  让「生成 → 画布节点带媒体」这条链路在 dev 下也能完整看到。
+ * ────────────────────────────────────────────── */
+
+const CANVAS_ID = "88888888-8888-4888-8888-888888888801";
+const NODE_UPLOAD_ID = "99999999-9999-4999-8999-999999999901";
+const NODE_VIDEO_ID = "99999999-9999-4999-8999-999999999902";
+const EDGE_REF_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01";
+
+interface MockCanvasRecord {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description: string | null;
+  nodeCount: number;
+  edgeCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface MockCanvasNode {
+  id: string;
+  canvasId: string;
+  nodeType: string;
+  positionX: number;
+  positionY: number;
+  width: number | null;
+  height: number | null;
+  payloadJson: string;
+  summary: string | null;
+  assetId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface MockCanvasEdge {
+  id: string;
+  canvasId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  edgeType: string;
+  label: string | null;
+  createdAt: string;
+}
+
+const demoNodes: MockCanvasNode[] = [
+  {
+    id: NODE_UPLOAD_ID,
+    canvasId: CANVAS_ID,
+    nodeType: "upload",
+    positionX: 80,
+    positionY: 60,
+    width: 220,
+    height: null,
+    payloadJson: JSON.stringify({
+      imageUrl: placeholderDataUrl("reference-beach.png"),
+      status: "succeeded",
+    }),
+    summary: "参考图：傍晚海面",
+    assetId: ASSET_A,
+    createdAt: ago(2),
+    updatedAt: ago(2),
+  },
+  {
+    id: NODE_VIDEO_ID,
+    canvasId: CANVAS_ID,
+    nodeType: "video",
+    positionX: 360,
+    positionY: 140,
+    width: 220,
+    height: null,
+    payloadJson: JSON.stringify({
+      imageUrl: SAMPLE_VIDEO_URL,
+      status: "succeeded",
+      prompt: "傍晚暖光的海浪",
+    }),
+    summary: "傍晚暖光的海浪（5 秒）",
+    assetId: null,
+    createdAt: ago(1),
+    updatedAt: ago(1),
+  },
+];
+
+const demoEdges: MockCanvasEdge[] = [
+  {
+    id: EDGE_REF_ID,
+    canvasId: CANVAS_ID,
+    sourceNodeId: NODE_UPLOAD_ID,
+    targetNodeId: NODE_VIDEO_ID,
+    edgeType: "reference",
+    label: null,
+    createdAt: ago(1),
+  },
+];
+
+const demoViewport = { canvasId: CANVAS_ID, zoom: 0.9, panX: 0, panY: 0, updatedAt: ago(0) };
+
+function demoCanvasRecord(): MockCanvasRecord {
+  return {
+    id: CANVAS_ID,
+    workspaceId: WORKSPACE_ID,
+    // 画布按「conv-<会话ID>」命名查找（useCanvasStore.loadCanvas），
+    // 这里挂到 demo 会话上，展开画布即可看到节点与媒体。
+    name: `conv-${CONV_1}`,
+    description: null,
+    nodeCount: demoNodes.length,
+    edgeCount: demoEdges.length,
+    createdAt: ago(3),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/** 把 `{request}` 里的可选字符串安全转成 string | null。 */
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
 
 /** 相对「现在」偏移若干天，返回 RFC3339 字符串。 */
 function ago(days: number, hours = 0): string {
@@ -357,7 +479,14 @@ const INVOCATIONS = [
     conversationId: CONV_1,
     toolName: "video_generation",
     argumentsJson: '{"prompt":"傍晚暖光的海浪","durationSeconds":5}',
-    resultJson: '{"status":"submitted"}',
+    // 浏览器预览没有真实生成能力：给一个可播放的公开示例视频，
+    // 让画布节点 / 资产预览的媒体链路在 dev 下也能被完整看到。
+    resultJson: JSON.stringify({
+      status: "succeeded",
+      imageUrl: SAMPLE_VIDEO_URL,
+      attempt: { id: "attempt_demo_1", status: "succeeded", resultUrl: SAMPLE_VIDEO_URL },
+      localAsset: null,
+    }),
     status: "succeeded",
     errorMessage: null,
     generationTaskId: null,
@@ -407,6 +536,111 @@ const MOCKS: Record<string, MockHandler> = {
   // 所有会话都返回同一段示例对话，保证任意会话点开都有内容可看。
   agent_v1_list_messages: () => MESSAGES,
   agent_v1_list_invocations: () => INVOCATIONS,
+
+  /* ── 画布（内存态：增删改即时生效） ── */
+  memory_canvas_v1_list: () => [demoCanvasRecord()],
+  memory_canvas_v1_get: () => demoCanvasRecord(),
+  memory_canvas_v1_create: (args) => {
+    const request = requestOf(args);
+    return { ...demoCanvasRecord(), name: optionalString(request.name) ?? "工作记忆画布" };
+  },
+  memory_canvas_v1_delete: () => undefined,
+
+  memory_node_v1_list: (args) => {
+    const request = requestOf(args);
+    return demoNodes.filter((node) => node.canvasId === request.canvas_id);
+  },
+  memory_node_v1_add: (args) => {
+    const request = requestOf(args);
+    const now = new Date().toISOString();
+    const node: MockCanvasNode = {
+      id: crypto.randomUUID(),
+      canvasId: String(request.canvas_id ?? CANVAS_ID),
+      nodeType: String(request.node_type ?? "image"),
+      positionX: Number(request.position_x ?? 0),
+      positionY: Number(request.position_y ?? 0),
+      width: null,
+      height: null,
+      payloadJson: String(request.payload_json ?? "{}"),
+      summary: optionalString(request.summary),
+      assetId: optionalString(request.asset_id),
+      createdAt: now,
+      updatedAt: now,
+    };
+    demoNodes.push(node);
+    return node;
+  },
+  memory_node_v1_update: (args) => {
+    const request = requestOf(args);
+    const index = demoNodes.findIndex((node) => node.id === request.id);
+    const base = index >= 0 ? demoNodes[index] : undefined;
+    const now = new Date().toISOString();
+    const updated: MockCanvasNode = {
+      id: String(request.id ?? base?.id ?? crypto.randomUUID()),
+      canvasId: String(request.canvas_id ?? base?.canvasId ?? CANVAS_ID),
+      nodeType: String(request.node_type ?? base?.nodeType ?? "image"),
+      positionX: Number(request.position_x ?? base?.positionX ?? 0),
+      positionY: Number(request.position_y ?? base?.positionY ?? 0),
+      width: base?.width ?? null,
+      height: base?.height ?? null,
+      payloadJson: String(request.payload_json ?? base?.payloadJson ?? "{}"),
+      summary:
+        request.summary === undefined ? (base?.summary ?? null) : optionalString(request.summary),
+      assetId:
+        request.asset_id === undefined ? (base?.assetId ?? null) : optionalString(request.asset_id),
+      createdAt: base?.createdAt ?? now,
+      updatedAt: now,
+    };
+    if (index >= 0) demoNodes[index] = updated;
+    return updated;
+  },
+  memory_node_v1_delete: (args) => {
+    const request = requestOf(args);
+    const index = demoNodes.findIndex((node) => node.id === request.id);
+    if (index >= 0) demoNodes.splice(index, 1);
+    return undefined;
+  },
+
+  memory_edge_v1_list: (args) => {
+    const request = requestOf(args);
+    return demoEdges.filter((edge) => edge.canvasId === request.canvas_id);
+  },
+  memory_edge_v1_add: (args) => {
+    const request = requestOf(args);
+    const edge: MockCanvasEdge = {
+      id: crypto.randomUUID(),
+      canvasId: String(request.canvas_id ?? CANVAS_ID),
+      sourceNodeId: String(request.source_node_id ?? ""),
+      targetNodeId: String(request.target_node_id ?? ""),
+      edgeType: String(request.edge_type ?? "reference"),
+      label: optionalString(request.label),
+      createdAt: new Date().toISOString(),
+    };
+    demoEdges.push(edge);
+    return edge;
+  },
+  memory_edge_v1_delete: (args) => {
+    const request = requestOf(args);
+    const index = demoEdges.findIndex((edge) => edge.id === request.id);
+    if (index >= 0) demoEdges.splice(index, 1);
+    return undefined;
+  },
+  memory_edge_v1_update_label: (args) => {
+    const request = requestOf(args);
+    const edge = demoEdges.find((item) => item.id === request.id);
+    if (edge) edge.label = optionalString(request.label);
+    return undefined;
+  },
+
+  memory_viewport_v1_get: () => demoViewport,
+  memory_viewport_v1_save: (args) => {
+    const request = requestOf(args);
+    demoViewport.zoom = Number(request.zoom ?? demoViewport.zoom);
+    demoViewport.panX = Number(request.pan_x ?? demoViewport.panX);
+    demoViewport.panY = Number(request.pan_y ?? demoViewport.panY);
+    demoViewport.updatedAt = new Date().toISOString();
+    return undefined;
+  },
 };
 
 /** 命中则返回 mock 数据；未命中返回 undefined（调用方回退到桌面运行时错误）。 */
@@ -435,18 +669,29 @@ function escapeXml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** 生成一张内联 SVG 占位图（灰底 + 图片图形 + 文件名）。 */
+/** 生成一张内联 SVG 占位图：按文件名派生色相的渐变「作品图」+ 文件名。
+ *  浏览器预览没有真实资产文件，用渐变图形代替纯灰占位，让资产库/画布看起来有内容。 */
 function placeholderDataUrl(filePath: string): string {
   const name = escapeXml(filePath.split(/[\\/]/).pop() ?? "asset");
+  let hue = 0;
+  for (const ch of name) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+  const c1 = `hsl(${hue} 46% 74%)`;
+  const c2 = `hsl(${(hue + 42) % 360} 42% 52%)`;
+  const c3 = `hsl(${(hue + 320) % 360} 40% 62%)`;
   const svg = [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">',
-    '<rect width="320" height="200" fill="#eceae7"/>',
-    '<g fill="none" stroke="#9aa2a7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
-    '<rect x="116" y="66" width="88" height="60" rx="6"/>',
-    '<circle cx="139" cy="87" r="7"/>',
-    '<path d="M124 120l26-26 20 20 14-12 16 16"/>',
-    "</g>",
-    `<text x="160" y="152" font-family="monospace" font-size="11" fill="#7b8489" text-anchor="middle">${name}</text>`,
+    '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320">',
+    "<defs>",
+    '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">',
+    `<stop offset="0%" stop-color="${c1}"/>`,
+    `<stop offset="100%" stop-color="${c2}"/>`,
+    "</linearGradient>",
+    "</defs>",
+    '<rect width="480" height="320" fill="url(#g)"/>',
+    `<circle cx="118" cy="104" r="62" fill="${c3}" opacity="0.55"/>`,
+    `<circle cx="352" cy="196" r="96" fill="#ffffff" opacity="0.16"/>`,
+    '<path d="M0 268 L132 176 L236 244 L330 168 L480 262 L480 320 L0 320 Z" fill="#000000" opacity="0.18"/>',
+    '<path d="M0 292 L148 226 L268 286 L372 224 L480 288 L480 320 L0 320 Z" fill="#000000" opacity="0.12"/>',
+    `<text x="24" y="40" font-family="monospace" font-size="14" fill="#ffffff" opacity="0.9">${name}</text>`,
     "</svg>",
   ].join("");
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -463,7 +708,11 @@ function installAssetPlaceholder(): void {
   const scope = window as unknown as { __TAURI_INTERNALS__?: Record<string, unknown> };
   const internals = scope.__TAURI_INTERNALS__ ?? {};
   if (typeof internals.convertFileSrc === "function") return;
-  internals.convertFileSrc = (filePath: unknown): string =>
-    typeof filePath === "string" ? placeholderDataUrl(filePath) : "";
+  internals.convertFileSrc = (filePath: unknown): string => {
+    if (typeof filePath !== "string") return "";
+    // 视频资产：返回可播放的示例视频，让悬停预览/播放器在 dev 下真的能播
+    if (/\.(mp4|mov|webm|m4v)$/i.test(filePath)) return SAMPLE_VIDEO_URL;
+    return placeholderDataUrl(filePath);
+  };
   scope.__TAURI_INTERNALS__ = internals;
 }

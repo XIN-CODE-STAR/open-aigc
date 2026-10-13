@@ -747,9 +747,15 @@ watch(
               }
             })()
           : inv.toolName;
-        memoryCanvasRef.value?.addGenerationNode("image", prompt, inv.id).then((nodeId) => {
-          if (nodeId) invocationNodeIds.value.set(inv.id, nodeId);
-        });
+        memoryCanvasRef.value
+          ?.addGenerationNode(
+            inv.toolName === "video_generation" ? "video" : "image",
+            prompt,
+            inv.id,
+          )
+          .then((nodeId) => {
+            if (nodeId) invocationNodeIds.value.set(inv.id, nodeId);
+          });
       }
 
       // 当任务成功时，更新状态并连线到上传节点
@@ -767,22 +773,31 @@ watch(
 
         try {
           const data = JSON.parse(inv.resultJson);
+          // 媒体地址来源（按优先级）：
+          // 1. imageUrl —— 同步路径（代理直接返回 URL，图片/视频共用该字段）
+          // 2. attempt.resultUrl —— 异步完成由 generation_pipeline 回填的远程结果地址
+          // 3. attempt.remoteJobId —— 兼容旧数据（形如 proxy:image:{url} / proxy:video:{url}）
+          // 4. localAsset.filePath —— 已落盘的本地文件，需 convertFileSrc 才能在 WebView 加载
+          const rawRemote = [
+            data.imageUrl,
+            data.attempt?.resultUrl,
+            data.attempt?.remoteJobId,
+          ].find(
+            (value: unknown): value is string => typeof value === "string" && value.length > 0,
+          );
+          const remoteUrl = rawRemote?.replace(/^proxy:(image|i2i|video):/, "") ?? "";
           let imageUrl = "";
-          // 工具返回 payload 里直接有 imageUrl（后端已注入）
-          if (data.imageUrl && data.imageUrl.startsWith("http")) {
-            imageUrl = data.imageUrl;
-          } else {
-            const remoteId = data.attempt?.remoteJobId || "";
-            const remoteUrl = remoteId.replace(/^proxy:(image|i2i):/, "");
-            if (remoteUrl && remoteUrl.startsWith("http")) {
-              imageUrl = remoteUrl;
-            } else if (data.localAsset?.filePath) {
-              imageUrl = data.localAsset.filePath;
-            }
+          if (/^https?:/.test(remoteUrl)) {
+            imageUrl = remoteUrl;
+          } else if (data.localAsset?.filePath) {
+            imageUrl = convertFileSrc(data.localAsset.filePath as string);
           }
 
+          // 视频工具落成 video 节点（此前一律 image，导致视频永远不显示预览）
+          const nodeType = inv.toolName === "video_generation" ? "video" : "image";
+
           if (imageUrl && nodeId) {
-            // 把生成结果图片 URL 写入节点 payload（CanvasNodeCard 渲染用）
+            // 把生成结果媒体 URL 写入节点 payload（CanvasNodeCard 渲染用）
             memoryCanvasRef.value
               ?.setNodeImageUrl(nodeId, imageUrl)
               .catch((e) => console.warn(String(e)));
@@ -793,7 +808,7 @@ watch(
             }
           } else if (imageUrl && !nodeId) {
             // 没有 pending 节点时创建新节点
-            memoryCanvasRef.value?.addGenerationNode("image", imageUrl, inv.id);
+            memoryCanvasRef.value?.addGenerationNode(nodeType, imageUrl, inv.id);
           }
         } catch {
           // ignore parse errors

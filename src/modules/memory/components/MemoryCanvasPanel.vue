@@ -59,6 +59,8 @@ import { useCanvasStore } from "../composables/useCanvasStore";
 const props = defineProps<{
   conversationId: string | null;
   visible: boolean;
+  /** 独立页面模式（/canvas 工作区）：隐藏浮层专属的关闭/全屏按钮。 */
+  standalone?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -1156,6 +1158,7 @@ defineExpose({
           >
           <span class="canvas-topbar__spacer" />
           <button
+            v-if="!standalone"
             class="canvas-topbar__btn"
             :class="{ 'canvas-topbar__btn--accent': immersive }"
             type="button"
@@ -1165,7 +1168,13 @@ defineExpose({
             <Minimize2 v-if="immersive" :size="14" />
             <Maximize2 v-else :size="14" />
           </button>
-          <button class="canvas-topbar__btn" type="button" title="关闭画布" @click="emit('close')">
+          <button
+            v-if="!standalone"
+            class="canvas-topbar__btn"
+            type="button"
+            title="关闭画布"
+            @click="emit('close')"
+          >
             <X :size="14" />
           </button>
         </header>
