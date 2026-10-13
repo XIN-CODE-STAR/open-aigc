@@ -1,17 +1,15 @@
 <script setup lang="ts">
 /**
- * AppTopbar：顶部栏。页面标题 + 上下文操作（记忆画布开关仅创意工坊显示）。
+ * AppTopbar：顶部栏。
+ *
+ * 曾在此放「工作记忆画布」浮层开关（仅创意工坊显示）；画布已提升为独立工作区
+ * （/canvas，侧栏直达），浮层入口遂成冗余，已移除。
  */
 import { computed } from "vue";
-import { Waypoints } from "@lucide/vue";
 import { useRoute } from "vue-router";
 
-import { useMemoryCanvasStore } from "../stores/memoryCanvas";
-
 const route = useRoute();
-const memoryCanvas = useMemoryCanvasStore();
 
-const isGenerationsRoute = computed(() => route.path === "/generations");
 const title = computed(() => String(route.meta.title ?? "OPEN AIGC"));
 </script>
 
@@ -20,15 +18,6 @@ const title = computed(() => String(route.meta.title ?? "OPEN AIGC"));
     <div class="topbar__context">
       <h1 class="topbar__title">{{ title }}</h1>
     </div>
-    <button
-      v-if="isGenerationsRoute"
-      class="topbar__canvas-btn"
-      :class="{ 'is-active': memoryCanvas.visible }"
-      title="工作记忆画布"
-      @click="memoryCanvas.toggle()"
-    >
-      <Waypoints :size="16" :stroke-width="1.8" />
-    </button>
   </header>
 </template>
 
@@ -62,32 +51,5 @@ const title = computed(() => String(route.meta.title ?? "OPEN AIGC"));
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.topbar__canvas-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
-}
-
-.topbar__canvas-btn:hover {
-  background: var(--color-fg-soft);
-  color: var(--color-text);
-}
-
-.topbar__canvas-btn.is-active {
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
 }
 </style>

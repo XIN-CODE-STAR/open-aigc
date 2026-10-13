@@ -23,7 +23,6 @@ import ModalDialog from "../../../shared/ui/ModalDialog.vue";
 import BrandWatermark from "../../../shared/ui/BrandWatermark.vue";
 import { useGenerationHistory } from "../composables/useGenerationHistory";
 import { useAgentConversation } from "../composables/useAgentConversation";
-import { isGenerationNodeTool } from "../generationNodeTools";
 import { isGenerationSourceFor, type GenerationMediaKind } from "../generationSources";
 import { useRoute, useRouter } from "vue-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -42,13 +41,10 @@ import {
   saveSelectedSkillIds,
 } from "../skills";
 import CreativeMemoryPanel from "../components/CreativeMemoryPanel.vue";
-import MemoryCanvasPanel from "../../../modules/memory/components/MemoryCanvasPanel.vue";
 import { queueV1SubmitAttempt } from "../../../bridge/queue";
 import { useProjectDirectory } from "../../../app/stores/projectDirectory";
-import { useMemoryCanvasStore } from "../../../app/stores/memoryCanvas";
 import { useShellActionsStore } from "../../../app/stores/shellActions";
 import type { AttachmentInput } from "../../../bridge/agent";
-import { analyzeImage } from "../../../bridge/imageAnalyzer";
 import { useSemanticAnalysis } from "../composables/useSemanticAnalysis";
 
 declare global {
@@ -224,9 +220,7 @@ const referenceImages = ref<
   { name: string; dataUrl: string; mimeType: string; filePath?: string }[]
 >([]);
 const showPreferences = ref(false);
-const memoryCanvas = useMemoryCanvasStore();
 const shellActions = useShellActionsStore();
-const memoryCanvasRef = ref<InstanceType<typeof MemoryCanvasPanel> | null>(null);
 const showModeMenu = ref(false);
 const modeMenuRef = ref<HTMLElement | null>(null);
 
@@ -712,123 +706,6 @@ watch(
   },
 );
 
-// 生成结果图片自动添加到工作记忆画布
-const prevInvocationStatuses = ref<Map<string, string>>(new Map());
-const invocationNodeIds = ref<Map<string, string>>(new Map());
-watch(
-  () => agent.invocations.value,
-  (invocations) => {
-    for (const inv of invocations) {
-      const prev = prevInvocationStatuses.value.get(inv.id);
-
-      // Agent 画布工具（直写后端）成功后实时刷新画布内容
-      if (
-        inv.toolName?.startsWith("canvas_") &&
-        inv.status === "succeeded" &&
-        prev !== "succeeded"
-      ) {
-        memoryCanvasRef.value?.refreshNodes();
-      }
-
-      // 只有生成类工具才需要在画布上建 pending 节点；画布工具的节点由后端直写、
-      // 成功后走上面的 refreshNodes()。此前此处无筛选：画布工具一进 running 就会
-      // 凭空造出「摘要=工具名」的幻影 image 节点（2026-10-01 0338e63 引入）。
-      // 判定与回归测试见 ../generationNodeTools.ts。
-      const isGenerationTool = isGenerationNodeTool(inv.toolName);
-
-      // 当任务开始执行时，添加 pending 节点
-      if (isGenerationTool && inv.status === "running" && prev !== "running") {
-        const prompt: string = inv.argumentsJson
-          ? (() => {
-              try {
-                return JSON.parse(inv.argumentsJson).prompt || inv.toolName;
-              } catch {
-                return inv.toolName;
-              }
-            })()
-          : inv.toolName;
-        memoryCanvasRef.value
-          ?.addGenerationNode(
-            inv.toolName === "video_generation" ? "video" : "image",
-            prompt,
-            inv.id,
-          )
-          .then((nodeId) => {
-            if (nodeId) invocationNodeIds.value.set(inv.id, nodeId);
-          });
-      }
-
-      // 当任务成功时，更新状态并连线到上传节点
-      if (
-        isGenerationTool &&
-        inv.status === "succeeded" &&
-        prev !== "succeeded" &&
-        inv.resultJson
-      ) {
-        // 更新节点状态
-        const nodeId = invocationNodeIds.value.get(inv.id);
-        if (nodeId) {
-          memoryCanvasRef.value?.setNodeStatus(nodeId, "succeeded");
-        }
-
-        try {
-          const data = JSON.parse(inv.resultJson);
-          // 媒体地址来源（按优先级）：
-          // 1. imageUrl —— 同步路径（代理直接返回 URL，图片/视频共用该字段）
-          // 2. attempt.resultUrl —— 异步完成由 generation_pipeline 回填的远程结果地址
-          // 3. attempt.remoteJobId —— 兼容旧数据（形如 proxy:image:{url} / proxy:video:{url}）
-          // 4. localAsset.filePath —— 已落盘的本地文件，需 convertFileSrc 才能在 WebView 加载
-          const rawRemote = [
-            data.imageUrl,
-            data.attempt?.resultUrl,
-            data.attempt?.remoteJobId,
-          ].find(
-            (value: unknown): value is string => typeof value === "string" && value.length > 0,
-          );
-          const remoteUrl = rawRemote?.replace(/^proxy:(image|i2i|video):/, "") ?? "";
-          let imageUrl = "";
-          if (/^https?:/.test(remoteUrl)) {
-            imageUrl = remoteUrl;
-          } else if (data.localAsset?.filePath) {
-            imageUrl = convertFileSrc(data.localAsset.filePath as string);
-          }
-
-          // 视频工具落成 video 节点（此前一律 image，导致视频永远不显示预览）
-          const nodeType = inv.toolName === "video_generation" ? "video" : "image";
-
-          if (imageUrl && nodeId) {
-            // 把生成结果媒体 URL 写入节点 payload（CanvasNodeCard 渲染用）
-            memoryCanvasRef.value
-              ?.setNodeImageUrl(nodeId, imageUrl)
-              .catch((e) => console.warn(String(e)));
-            // 连线到最近的上传节点（用户上传的参考图）
-            const uploadNodes = memoryCanvasRef.value?.findRecentNodesByType("upload") || [];
-            for (const uploadNode of uploadNodes.slice(-3)) {
-              memoryCanvasRef.value?.addEdgeBetweenNodes(uploadNode.id, nodeId, "reference");
-            }
-          } else if (imageUrl && !nodeId) {
-            // 没有 pending 节点时创建新节点
-            memoryCanvasRef.value?.addGenerationNode(nodeType, imageUrl, inv.id);
-          }
-        } catch {
-          // ignore parse errors
-        }
-      }
-
-      // 当任务失败时，更新节点状态
-      if (isGenerationTool && inv.status === "failed" && prev !== "failed") {
-        const nodeId = invocationNodeIds.value.get(inv.id);
-        if (nodeId) {
-          memoryCanvasRef.value?.setNodeStatus(nodeId, "failed");
-        }
-      }
-
-      prevInvocationStatuses.value.set(inv.id, inv.status);
-    }
-  },
-  { deep: true },
-);
-
 // Agent 循环阶段切换（thinking → executing → idle）触发滚动
 watch(agentLoopPhase, async () => {
   await nextTick();
@@ -1177,53 +1054,9 @@ async function sendAgentMessage(
       window.dispatchEvent(new CustomEvent("aigc-agent-conversations-updated"));
     }
     await agent.sendMessage(prompt, buildAttachments(), skillOverride);
-    console.log(
-      "[Canvas] sendMessage completed, error:",
-      agent.errorMessage.value,
-      "conversationId:",
-      agentConversation.value?.id,
-    );
     if (!agent.errorMessage.value) {
-      // 将用户上传的图片添加到记忆画布
-      const uploadedImages = [...referenceImages.value];
-      console.log(
-        "[Canvas] uploadedImages count:",
-        uploadedImages.length,
-        "memoryCanvasRef:",
-        !!memoryCanvasRef.value,
-      );
-      const uploadNodeIds: string[] = [];
-      for (const img of uploadedImages) {
-        // 如果有文件路径，先进行本地分析获取描述
-        let description = "";
-        if (img.filePath && img.mimeType.startsWith("image/")) {
-          try {
-            const analysis = await analyzeImage(img.filePath);
-            description = analysis.description;
-          } catch (e) {
-            console.warn("[Canvas] image analysis failed:", e);
-          }
-        }
-        const nodeId = await memoryCanvasRef.value?.addUploadNode(
-          "image",
-          img.name,
-          img.dataUrl,
-          description,
-        );
-        console.log("[Canvas] addUploadNode result:", nodeId, "for:", img.name);
-        if (nodeId) uploadNodeIds.push(nodeId);
-      }
-      // 将上传节点之间互相连线（reference 关系）
-      if (uploadNodeIds.length > 1) {
-        for (let i = 1; i < uploadNodeIds.length; i++) {
-          await memoryCanvasRef.value?.addEdgeBetweenNodes(
-            uploadNodeIds[0],
-            uploadNodeIds[i],
-            "reference",
-          );
-        }
-      }
-
+      // 生成结果由后端直写入工作记忆画布（独立工作区 /canvas 可见），
+      // 前端此处不再镜像节点，避免两套状态互相覆盖。
       promptText.value = "";
       referenceImages.value = [];
       lastDraft.value = "";
@@ -1590,14 +1423,6 @@ function formatTime(iso: string): string {
         </button>
       </template>
     </ModalDialog>
-
-    <!-- 工作记忆画布面板（页面级覆盖层：欢迎页/会话页顶栏按钮均可开关） -->
-    <MemoryCanvasPanel
-      ref="memoryCanvasRef"
-      :conversation-id="agentConversation?.id ?? null"
-      :visible="memoryCanvas.visible"
-      @close="memoryCanvas.close()"
-    />
   </div>
 </template>
 
