@@ -14,9 +14,9 @@ use crate::{
     application::error::AppError,
     domain::{
         agent::{
-            ChatMessage, ChatRequest, ConversationRecord, MessageDraft, MessageRecord, MessageRole,
-            PlanRecord, PlanStep, PlanStepStatus, ToolCall, ToolInvocationDraft,
-            ToolInvocationRecord, ToolInvocationStatus, EXECUTE_MAX_ITERATIONS,
+            sanitize_tool_call_pairing, ChatMessage, ChatRequest, ConversationRecord, MessageDraft,
+            MessageRecord, MessageRole, PlanRecord, PlanStep, PlanStepStatus, ToolCall,
+            ToolInvocationDraft, ToolInvocationRecord, ToolInvocationStatus, EXECUTE_MAX_ITERATIONS,
         },
         sandbox::SandboxPolicy,
     },
@@ -335,7 +335,10 @@ impl ExecutionEngine {
                 .content
                 .as_deref()
                 .map(|c| c.trim() == last_assistant_content.trim() && !c.trim().is_empty())
-                .unwrap_or(false);
+                .unwrap_or(false)
+                // 带 tool_calls 的消息不能去重丢弃：否则历史里只剩 tool 响应、
+                // 丢了 tool_calls，消息序列不再合法。
+                && response.tool_calls.is_empty();
 
             let assistant_record = if is_duplicate_of_previous {
                 crate::diag_fail!(
@@ -444,6 +447,29 @@ impl ExecutionEngine {
                 // 生成工具成功后直接结束，不再调用 LLM 总结（减少冗余回复）
                 if is_generation_tool && invocation_record.status == ToolInvocationStatus::Succeeded
                 {
+                    // 先落库工具结果消息：assistant.tool_calls 必须紧跟对应的 tool 响应，
+                    // 否则下一轮请求会被上游拒绝（HTTP 400 insufficient tool messages）。
+                    let tool_message_content = invocation_record
+                        .result_json
+                        .clone()
+                        .unwrap_or_else(|| serde_json::json!({ "status": "ok" }).to_string());
+                    let tool_record = self.with_agent_repository(|repo| {
+                        repo.append_message(MessageDraft::tool_message(
+                            conversation_id.to_owned(),
+                            tool_call.id.clone(),
+                            tool_message_content,
+                        )?)
+                        .map_err(AppError::from)
+                    })?;
+                    super::agent_service::emit_event(
+                        app,
+                        conversation_id,
+                        AgentEvent::MessageAppended {
+                            conversation_id: conversation_id.to_owned(),
+                            message: tool_record,
+                        },
+                    );
+
                     all_invocations.push(invocation_record);
                     // 写入一条简洁的成功消息
                     let success_msg = format!(
@@ -503,6 +529,29 @@ impl ExecutionEngine {
                         })
                         .or_else(|| invocation_record.error_message.clone())
                         .unwrap_or_else(|| "未知原因".to_owned());
+                    // 工具失败同样要落库 tool 响应，保持 tool_calls 配对完整
+                    //（否则后续请求会因孤儿 tool_calls 被上游拒绝）。
+                    let tool_message_content = serde_json::json!({
+                        "status": "error",
+                        "error": reason.clone(),
+                    })
+                    .to_string();
+                    let tool_record = self.with_agent_repository(|repo| {
+                        repo.append_message(MessageDraft::tool_message(
+                            conversation_id.to_owned(),
+                            tool_call.id.clone(),
+                            tool_message_content,
+                        )?)
+                        .map_err(AppError::from)
+                    })?;
+                    super::agent_service::emit_event(
+                        app,
+                        conversation_id,
+                        AgentEvent::MessageAppended {
+                            conversation_id: conversation_id.to_owned(),
+                            message: tool_record,
+                        },
+                    );
                     let failure_msg = format!(
                         "{}任务提交失败，本次执行已停止。原因：{reason}",
                         if tool_call.function.name == "image_generation" {
@@ -960,6 +1009,10 @@ fn build_chat_messages_with_window(
             messages.remove(idx);
         }
     }
+
+    // 最后一道保险：预算裁剪可能移除单条消息而破坏配对，统一修复后再发送，
+    // 避免上游 HTTP 400（insufficient tool messages following tool_calls message）。
+    sanitize_tool_call_pairing(&mut messages);
 
     messages
 }

@@ -16,11 +16,11 @@ use crate::{
     },
     domain::{
         agent::{
-            normalize_conversation_title, parse_plan_from_text, ChatMessage, ChatRequest,
-            ConversationDraft, ConversationRecord, ConversationStatus, MessageDraft, MessageRecord,
-            MessageRole, PlanDraft, PlanRecord, PlanStep, PlanStepStatus, ToolCall,
-            ToolInvocationDraft, ToolInvocationRecord, ToolInvocationStatus,
-            EXECUTE_MAX_ITERATIONS, PLAN_MAX_ITERATIONS,
+            normalize_conversation_title, parse_plan_from_text, sanitize_tool_call_pairing,
+            ChatMessage, ChatRequest, ConversationDraft, ConversationRecord, ConversationStatus,
+            MessageDraft, MessageRecord, MessageRole, PlanDraft, PlanRecord, PlanStep,
+            PlanStepStatus, ToolCall, ToolInvocationDraft, ToolInvocationRecord,
+            ToolInvocationStatus, EXECUTE_MAX_ITERATIONS, PLAN_MAX_ITERATIONS,
         },
         creative_plan::CreativePlan,
     },
@@ -2008,6 +2008,10 @@ fn build_chat_messages_with_window(
             // 已有系统摘要，不需要额外插入
         }
     }
+
+    // 最后一道保险：无论窗口裁剪还是预算裁剪，都修复 tool_calls/tool 配对，
+    // 避免上游 HTTP 400（insufficient tool messages following tool_calls message）。
+    sanitize_tool_call_pairing(&mut messages);
 
     messages
 }

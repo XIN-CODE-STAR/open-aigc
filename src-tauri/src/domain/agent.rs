@@ -567,6 +567,99 @@ impl ChatMessage {
     }
 }
 
+/// 发送前修复 `tool_calls` / `tool` 消息配对（OpenAI 协议硬约束）。
+///
+/// 触发场景（历史裁剪截断、工具执行中断、结果未落库等）会导致：
+/// - assistant 带 `tool_calls`，但缺少对应 `tool_call_id` 的 tool 响应
+///   → 上游返回 HTTP 400 `insufficient tool messages following tool_calls message`；
+/// - tool 消息前面没有对应的 assistant `tool_calls`（孤儿响应）。
+///
+/// 清洗策略：
+/// 1. 删除孤儿 tool 消息（其 `tool_call_id` 不在紧邻前置 assistant 的 `tool_calls` 中）；
+/// 2. 为 `tool_calls` 中缺失响应的每个 id 补一条合成 tool 消息（保留调用语义，
+///    让模型知道该工具没有返回结果，而不是让整个请求失败）。
+///
+/// 该函数保证输出序列满足：每条 assistant.tool_calls 之后紧跟且仅跟其对应的一组 tool 消息。
+pub fn sanitize_tool_call_pairing(messages: &mut Vec<ChatMessage>) {
+    // Pass A：删除孤儿 tool 消息。
+    // pending 记录「最近一条 assistant 尚未被响应的 tool_call_id」。
+    let mut pending: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < messages.len() {
+        match messages[i].role.as_str() {
+            "assistant" => {
+                pending = messages[i]
+                    .tool_calls
+                    .iter()
+                    .map(|tc| tc.id.clone())
+                    .collect();
+                i += 1;
+            }
+            "tool" => {
+                // 在「最近一条 assistant 的未响应 id」中查找并消费；
+                // 未命中即孤儿响应，删除。
+                let matched = match messages[i].tool_call_id.as_ref() {
+                    Some(id) => match pending.iter().position(|p| p == id) {
+                        Some(pos) => {
+                            pending.remove(pos);
+                            true
+                        }
+                        None => false,
+                    },
+                    None => false,
+                };
+                if matched {
+                    i += 1;
+                } else {
+                    // 孤儿 tool：删除后不前进（后续消息前移）。
+                    messages.remove(i);
+                }
+            }
+            _ => {
+                // 非 assistant/tool 消息打断配对块。
+                pending.clear();
+                i += 1;
+            }
+        }
+    }
+
+    // Pass B：为缺失的 tool 响应补合成消息。
+    let mut i = 0;
+    while i < messages.len() {
+        if messages[i].role == "assistant" && !messages[i].tool_calls.is_empty() {
+            let calls: Vec<(String, String)> = messages[i]
+                .tool_calls
+                .iter()
+                .map(|tc| (tc.id.clone(), tc.function.name.clone()))
+                .collect();
+            let mut j = i + 1;
+            let mut responded: Vec<String> = Vec::new();
+            while j < messages.len() && messages[j].role == "tool" {
+                if let Some(id) = &messages[j].tool_call_id {
+                    responded.push(id.clone());
+                }
+                j += 1;
+            }
+            let mut insert_at = j;
+            for (id, name) in calls {
+                if !responded.contains(&id) {
+                    messages.insert(
+                        insert_at,
+                        ChatMessage::tool(
+                            id,
+                            format!("[工具 {name} 未返回结果：该调用被中断或结果缺失，请据此继续。]"),
+                        ),
+                    );
+                    insert_at += 1;
+                }
+            }
+            i = insert_at;
+        } else {
+            i += 1;
+        }
+    }
+}
+
 /// Chat 响应（对 LLM 端口）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1097,5 +1190,82 @@ mod tests {
         assert_eq!(config.max_context_messages, 20);
         assert!(config.include_system_prompt);
         assert!(!config.enable_long_term_memory);
+    }
+
+    // ─── tool_calls / tool 配对清洗（上游 HTTP 400 的修复） ───
+
+    fn tc(id: &str, name: &str) -> ToolCall {
+        ToolCall::new(id.to_owned(), name.to_owned(), "{}".to_owned())
+    }
+
+    #[test]
+    fn sanitize_keeps_valid_pairs_untouched() {
+        let mut messages = vec![
+            ChatMessage::user("hi".into()),
+            ChatMessage::assistant(None, vec![tc("call_a", "t1"), tc("call_b", "t2")]),
+            ChatMessage::tool("call_a".into(), "r1".into()),
+            ChatMessage::tool("call_b".into(), "r2".into()),
+            ChatMessage::assistant(Some("done".into()), vec![]),
+        ];
+        let expected = messages.clone();
+        sanitize_tool_call_pairing(&mut messages);
+        assert_eq!(messages, expected);
+    }
+
+    #[test]
+    fn sanitize_inserts_missing_tool_responses() {
+        // assistant 带 tool_calls 但完全没有 tool 响应（工具中断/结果未落库）
+        let mut messages = vec![
+            ChatMessage::user("画一张图".into()),
+            ChatMessage::assistant(None, vec![tc("call_1", "generate_image")]),
+            ChatMessage::user("继续".into()),
+        ];
+        sanitize_tool_call_pairing(&mut messages);
+        assert_eq!(messages.len(), 4);
+        assert_eq!(messages[2].role, "tool");
+        assert_eq!(messages[2].tool_call_id.as_deref(), Some("call_1"));
+        assert_eq!(messages[3].role, "user");
+    }
+
+    #[test]
+    fn sanitize_fills_partial_tool_responses() {
+        // 两个 tool_call 只回了一个，缺的那个补合成响应
+        let mut messages = vec![
+            ChatMessage::user("hi".into()),
+            ChatMessage::assistant(None, vec![tc("call_a", "t1"), tc("call_b", "t2")]),
+            ChatMessage::tool("call_a".into(), "r1".into()),
+        ];
+        sanitize_tool_call_pairing(&mut messages);
+        assert_eq!(messages.len(), 4);
+        assert_eq!(messages[2].tool_call_id.as_deref(), Some("call_a"));
+        assert_eq!(messages[3].tool_call_id.as_deref(), Some("call_b"));
+        assert_eq!(messages[3].role, "tool");
+    }
+
+    #[test]
+    fn sanitize_drops_orphan_tool_messages() {
+        // 孤儿 tool：前面没有对应的 assistant.tool_calls
+        let mut messages = vec![
+            ChatMessage::user("hi".into()),
+            ChatMessage::tool("call_missing".into(), "{}".into()),
+            ChatMessage::assistant(Some("ok".into()), vec![]),
+        ];
+        sanitize_tool_call_pairing(&mut messages);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "user");
+        assert_eq!(messages[1].role, "assistant");
+    }
+
+    #[test]
+    fn sanitize_handles_window_truncated_history() {
+        // 模拟窗口裁剪：assistant.tool_calls 被保留，其后的 tool 响应被截掉
+        let mut messages = vec![
+            ChatMessage::system("sys".into()),
+            ChatMessage::assistant(None, vec![tc("call_x", "read_file")]),
+        ];
+        sanitize_tool_call_pairing(&mut messages);
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[2].role, "tool");
+        assert_eq!(messages[2].tool_call_id.as_deref(), Some("call_x"));
     }
 }
