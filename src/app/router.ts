@@ -11,6 +11,7 @@ const BackupPage = () => import("../modules/backup/pages/BackupPage.vue");
 const PluginsPage = () => import("../modules/plugins/pages/PluginsPage.vue");
 const ModelsPage = () => import("../modules/models/pages/ModelsPage.vue");
 const TasksPage = () => import("../modules/tasks/pages/TasksPage.vue");
+const MemoryCanvasPage = () => import("../modules/memory/pages/MemoryCanvasPage.vue");
 const ModuleLandingPage = () => import("./pages/ModuleLandingPage.vue");
 
 // OPEN AIGC 仅保留 Agent 创作相关功能：
@@ -31,6 +32,11 @@ const routes: RouteRecordRaw[] = [
     path: "/generations",
     component: GenerationsPage,
     meta: { title: "创意工坊" },
+  },
+  {
+    path: "/canvas",
+    component: MemoryCanvasPage,
+    meta: { title: "工作记忆画布" },
   },
   {
     path: "/prompts",
