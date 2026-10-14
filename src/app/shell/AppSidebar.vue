@@ -6,7 +6,7 @@
  * 历史对话不再挂在侧栏，已集中到「任务」页查看（见 modules/tasks）。
  * 默认 68px 图标窄轨，钉住展开为完整面板（preferences.navigationExpanded）。
  */
-import { computed, onMounted, ref, type Component } from "vue";
+import { computed, onMounted, onUnmounted, type Component } from "vue";
 import {
   Archive,
   BookOpenText,
@@ -25,13 +25,14 @@ import {
 import { RouterLink, useRoute } from "vue-router";
 
 import appIconUrl from "../../../assets/app-icon.svg";
-import { listConversations, type ConversationRecord } from "../../bridge/agent";
+import type { ConversationRecord } from "../../bridge/agent";
 import { usePreferencesStore } from "../stores/preferences";
 import { useProjectDirectory } from "../stores/projectDirectory";
 import { useWorkspaceStore } from "../stores/workspace";
 import { useShellActionsStore } from "../stores/shellActions";
 import { useMemoryCanvasStore } from "../stores/memoryCanvas";
 import { useConversationWorkspaces } from "../composables/useConversationWorkspaces";
+import { useConversationList } from "../composables/useConversationList";
 import { formatRelativeTime } from "../../shared/utils/time";
 
 const preferences = usePreferencesStore();
@@ -40,6 +41,11 @@ const projectDir = useProjectDirectory();
 const shellActions = useShellActionsStore();
 const memoryCanvas = useMemoryCanvasStore();
 const conversationWorkspaces = useConversationWorkspaces();
+const {
+  conversations: recentConversations,
+  refresh: refreshConversations,
+  ensureLoaded,
+} = useConversationList();
 
 const expanded = computed(() => preferences.navigationExpanded);
 const route = useRoute();
@@ -62,8 +68,6 @@ const DEFAULT_GROUP = "OPEN AIGC";
 /** 侧栏空间有限：任务最多 6 条，每个空间最多 4 条子项。 */
 const MAX_LOOSE_TASKS = 6;
 const MAX_SPACE_TASKS = 4;
-
-const recentConversations = ref<ConversationRecord[]>([]);
 
 /** 是否为「未归属任何工作目录」的对话（而非恰好叫该名字的真实空间）。 */
 function isLooseTask(conversation: ConversationRecord): boolean {
@@ -97,16 +101,23 @@ const spaceGroups = computed(() =>
     .map((group) => ({ ...group, items: group.items.slice(0, MAX_SPACE_TASKS) })),
 );
 
-async function loadRecentConversations(): Promise<void> {
-  try {
-    recentConversations.value = await listConversations();
-  } catch {
+/**
+ * 会话列表在别处发生变化时（创意工坊新建、任务页改名/删除）重新拉取。
+ * 列表是共享单例，刷新后侧栏与任务页同时更新，不会再各说各话。
+ */
+function onConversationsUpdated(): void {
+  refreshConversations().catch(() => {
     // 侧栏列表是辅助信息，读取失败静默降级，不影响导航
-  }
+  });
 }
 
 onMounted(() => {
-  void loadRecentConversations();
+  void ensureLoaded();
+  window.addEventListener("aigc-agent-conversations-updated", onConversationsUpdated);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("aigc-agent-conversations-updated", onConversationsUpdated);
 });
 
 interface NavItem {

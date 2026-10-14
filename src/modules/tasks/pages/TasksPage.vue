@@ -32,7 +32,6 @@ import {
 import {
   clearConversation,
   deleteConversation,
-  listConversations,
   listInvocations,
   listMessages,
   renameConversation,
@@ -43,6 +42,7 @@ import {
 import EmptyState from "../../../shared/ui/EmptyState.vue";
 import { useToast } from "../../../shared/ui/useToast";
 import { useConversationWorkspaces } from "../../../app/composables/useConversationWorkspaces";
+import { useConversationList } from "../../../app/composables/useConversationList";
 import { useShellActionsStore } from "../../../app/stores/shellActions";
 import { formatDateTime, formatRelativeTime } from "../../../shared/utils/time";
 import {
@@ -76,7 +76,11 @@ const TOOL_LABELS: Record<string, string> = {
  *  历史对话列表
  * ────────────────────────────────────────────── */
 
-const conversations = ref<ConversationRecord[]>([]);
+/**
+ * 会话列表来自共享单例（与侧栏同一份），本页的增删改会即时反映到侧栏，
+ * 侧栏刷新也会即时反映到本页 —— 不再各持一份、各刷各的。
+ */
+const { conversations, refresh: refreshConversationList } = useConversationList();
 const listPhase = ref<"idle" | "loading" | "ready" | "error">("idle");
 const listError = ref<string | null>(null);
 
@@ -155,8 +159,7 @@ async function refresh(): Promise<void> {
   listPhase.value = "loading";
   listError.value = null;
   try {
-    const records = await listConversations();
-    conversations.value = records;
+    const records = await refreshConversationList();
     listPhase.value = "ready";
     // 首次进入或当前选中项已不存在时，默认打开最近一条，减少一次点击。
     if (!selectedId.value || !records.some((item) => item.id === selectedId.value)) {
@@ -169,6 +172,16 @@ async function refresh(): Promise<void> {
     listPhase.value = "error";
     listError.value = error instanceof Error ? error.message : "历史对话加载失败。";
   }
+}
+
+/**
+ * 广播「会话列表已变化」。
+ * 本页与侧栏共享同一份列表（会自动同步），但创意工坊持有自己的副本，
+ * 需要这个事件才会重新拉取 —— 否则在任务页改名/删除后回到创意工坊，
+ * 看到的仍是旧标题、甚至仍指向已删除的会话。
+ */
+function notifyConversationsUpdated(): void {
+  window.dispatchEvent(new CustomEvent("aigc-agent-conversations-updated"));
 }
 
 /* ──────────────────────────────────────────────
@@ -332,6 +345,7 @@ async function confirmDelete(): Promise<void> {
     conversationWorkspaces.remove(target.id);
     if (selectedId.value === target.id) resetDetail();
     await refresh();
+    notifyConversationsUpdated();
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "删除对话失败。");
   }
@@ -361,6 +375,7 @@ async function commitRename(): Promise<void> {
   try {
     const updated = await renameConversation(id, title);
     conversations.value = conversations.value.map((item) => (item.id === id ? updated : item));
+    notifyConversationsUpdated();
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "重命名失败。");
   }
@@ -877,6 +892,12 @@ onMounted(() => {
   font-family: inherit;
   font-size: var(--text-footnote);
   outline: none;
+}
+
+/* 焦点反馈由外层容器的 :focus-within 边框承担；输入框自身再套一圈
+   全局 focus-ring 会在框内多出一个方形描边（视觉噪音）。 */
+.tasks__search input:focus-visible {
+  box-shadow: none;
 }
 
 .tasks__search input::placeholder {
