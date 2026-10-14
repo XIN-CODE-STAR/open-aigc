@@ -171,6 +171,22 @@ input:disabled {
   cursor: not-allowed;
 }
 
+/* —— 搜索框：清掉 UA 原生外观 ——
+   type="search" 在 Chromium 下自带灰底方框与一个蓝色的清除按钮，会和
+   各页自定义的样式化清除按钮并排出现（两个 ✕）。统一置为无外观。 */
+input[type="search"] {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  display: none;
+}
+
 ::selection {
   color: var(--color-text);
   background: var(--color-accent-soft);

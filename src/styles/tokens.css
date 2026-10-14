@@ -19,7 +19,10 @@
   --color-surface: oklch(1 0 0);
   --color-surface-subtle: oklch(0.975 0.003 95);
   --color-surface-hover: color-mix(in oklab, oklch(0.148 0.004 228.8) 6%, transparent);
-  --color-surface-selected: color-mix(in oklab, #3a7294 14%, transparent);
+  /* 选中态用中性灰，不用主色 —— 与暗色主题口径一致（暗色也是中性）。
+     用主色填充会在列表里浮出一块蓝色方块，与「一个色相只做点缀」的
+     设计原则相悖；此处取 11% 以与 hover 的 6% 明确区分。 */
+  --color-surface-selected: color-mix(in oklab, oklch(0.148 0.004 228.8) 11%, transparent);
 
   /* 发丝线 */
   --color-border: color-mix(in oklab, oklch(0.148 0.004 228.8) 15%, transparent);
