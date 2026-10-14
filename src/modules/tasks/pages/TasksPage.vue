@@ -3,44 +3,39 @@
  * TasksPage：「任务」页——历史对话的集中查看入口。
  *
  * 口径（对齐产品设计）：
- * - 左列：全部历史对话（按工作目录分组）+ 搜索 / 目录筛选 + 右键重命名/删除
+ * - 左列：全部历史对话（按工作目录分组）+ 搜索 / 目录筛选
  * - 右列：所选对话的**只读回放**，阅读时停留在本页，不跳回创意工坊
  * - 只有点「继续对话」才回到 /generations 接着聊
  * - 页面明确说明历史保存范围，避免用户误以为已删除内容可以找回
  *
- * 本页不改写对话内容，只提供重命名 / 删除两项管理操作。
+ * 管理口径（2026-10-14 起）：任务/空间中的历史对话只读 —— 可回放、可
+ * 「继续对话」追加新内容，但**不提供删除 / 清空消息 / 重命名**。历史是
+ * 日志而非工作区，删除路径收在别处，本页避免误触不可逆操作。
  */
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useRouter } from "vue-router";
 import {
   ChevronRight,
-  Eraser,
   Folder,
   Info,
   LoaderCircle,
   MessageSquareText,
-  Pencil,
   Play,
   Plus,
   RefreshCcw,
   Search,
-  Trash2,
   X,
 } from "@lucide/vue";
 
 import {
-  clearConversation,
-  deleteConversation,
   listInvocations,
   listMessages,
-  renameConversation,
   type ConversationRecord,
   type MessageRecord,
   type ToolInvocationRecord,
 } from "../../../bridge/agent";
 import EmptyState from "../../../shared/ui/EmptyState.vue";
-import { useToast } from "../../../shared/ui/useToast";
 import { useConversationWorkspaces } from "../../../app/composables/useConversationWorkspaces";
 import { useConversationList } from "../../../app/composables/useConversationList";
 import { useShellActionsStore } from "../../../app/stores/shellActions";
@@ -52,7 +47,6 @@ import {
 } from "../../../shared/utils/richText";
 
 const router = useRouter();
-const toast = useToast();
 const conversationWorkspaces = useConversationWorkspaces();
 const shellActions = useShellActionsStore();
 
@@ -174,16 +168,6 @@ async function refresh(): Promise<void> {
   }
 }
 
-/**
- * 广播「会话列表已变化」。
- * 本页与侧栏共享同一份列表（会自动同步），但创意工坊持有自己的副本，
- * 需要这个事件才会重新拉取 —— 否则在任务页改名/删除后回到创意工坊，
- * 看到的仍是旧标题、甚至仍指向已删除的会话。
- */
-function notifyConversationsUpdated(): void {
-  window.dispatchEvent(new CustomEvent("aigc-agent-conversations-updated"));
-}
-
 /* ──────────────────────────────────────────────
  *  只读回放
  * ────────────────────────────────────────────── */
@@ -262,128 +246,12 @@ function continueConversation(id: string): void {
 }
 
 /* ──────────────────────────────────────────────
- *  右键菜单：重命名 / 删除
+ *  任务管理口径
  *
- *  这两项能力原先挂在侧栏的历史面板上；历史迁到本页后一并搬过来，
- *  避免"能看到历史却无法管理"的功能回退。
+ *  任务/空间中的历史对话只读：可以点开回放，也可以「继续对话」往同一会话
+ *  追加新内容，但不提供删除 / 清空消息 / 重命名 —— 历史是日志，不做整理。
+ *  （原右键菜单曾含这三项，迁到本页后按产品口径移除。）
  * ────────────────────────────────────────────── */
-
-interface MenuState {
-  x: number;
-  y: number;
-  conversation: ConversationRecord;
-  mode: "menu" | "confirm-delete" | "confirm-clear";
-}
-
-const menu = ref<MenuState | null>(null);
-const renamingId = ref<string | null>(null);
-const renamingTitle = ref("");
-const renameInput = ref<HTMLInputElement | null>(null);
-
-const menuLeft = computed(() => Math.max(8, Math.min(menu.value?.x ?? 0, window.innerWidth - 200)));
-const menuTop = computed(() => Math.max(8, Math.min(menu.value?.y ?? 0, window.innerHeight - 150)));
-
-function openMenu(event: MouseEvent, conversation: ConversationRecord): void {
-  event.preventDefault();
-  event.stopPropagation();
-  menu.value = { x: event.clientX, y: event.clientY, conversation, mode: "menu" };
-}
-
-function closeMenu(): void {
-  menu.value = null;
-}
-
-function onMenuKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape") closeMenu();
-}
-
-watch(
-  () => menu.value !== null,
-  (open) => {
-    if (open) {
-      window.addEventListener("click", closeMenu);
-      window.addEventListener("keydown", onMenuKeydown);
-      window.addEventListener("resize", closeMenu);
-    } else {
-      window.removeEventListener("click", closeMenu);
-      window.removeEventListener("keydown", onMenuKeydown);
-      window.removeEventListener("resize", closeMenu);
-    }
-  },
-);
-
-function beginDeleteConfirm(): void {
-  if (!menu.value) return;
-  menu.value = { ...menu.value, mode: "confirm-delete" };
-}
-
-function beginClearConfirm(): void {
-  if (!menu.value) return;
-  menu.value = { ...menu.value, mode: "confirm-clear" };
-}
-
-/** 清空消息：删除该对话的消息记录，保留对话本身；随后重新加载详情。 */
-async function confirmClear(): Promise<void> {
-  const target = menu.value?.conversation;
-  closeMenu();
-  if (!target) return;
-  try {
-    await clearConversation(target.id);
-    toast.success("已清空该对话的消息。");
-    if (selectedId.value === target.id) await select(target.id);
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : "清空对话失败。");
-  }
-}
-
-async function confirmDelete(): Promise<void> {
-  const target = menu.value?.conversation;
-  closeMenu();
-  if (!target) return;
-  try {
-    await deleteConversation(target.id);
-    conversationWorkspaces.remove(target.id);
-    if (selectedId.value === target.id) resetDetail();
-    await refresh();
-    notifyConversationsUpdated();
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : "删除对话失败。");
-  }
-}
-
-function startRename(conversation: ConversationRecord): void {
-  closeMenu();
-  renamingId.value = conversation.id;
-  renamingTitle.value = conversation.title;
-  void nextTick(() => {
-    renameInput.value?.focus();
-    renameInput.value?.select();
-  });
-}
-
-function bindRenameInput(el: unknown): void {
-  renameInput.value = el instanceof HTMLInputElement ? el : null;
-}
-
-async function commitRename(): Promise<void> {
-  const id = renamingId.value;
-  if (!id) return;
-  renamingId.value = null;
-  const original = conversations.value.find((item) => item.id === id);
-  const title = renamingTitle.value.trim();
-  if (!original || !title || title === original.title) return;
-  try {
-    const updated = await renameConversation(id, title);
-    conversations.value = conversations.value.map((item) => (item.id === id ? updated : item));
-    notifyConversationsUpdated();
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : "重命名失败。");
-  }
-}
-
-function cancelRename(): void {
-  renamingId.value = null;
-}
 
 /** 新建任务：回到创意工坊并清空当前会话（经 shell 动作总线通知生成页）。 */
 function startNewTask(): void {
@@ -515,28 +383,12 @@ onMounted(() => {
               任务 <span class="tasks__section-count">({{ looseTasks.length }})</span>
             </h2>
             <template v-for="item in looseTasks" :key="item.id">
-              <div v-if="renamingId === item.id" class="tasks__item is-editing">
-                <input
-                  :ref="bindRenameInput"
-                  v-model="renamingTitle"
-                  class="tasks__rename"
-                  type="text"
-                  maxlength="200"
-                  aria-label="重命名对话"
-                  @click.stop
-                  @keydown.enter.prevent="commitRename"
-                  @keydown.esc.prevent="cancelRename"
-                  @blur="commitRename"
-                />
-              </div>
               <button
-                v-else
                 type="button"
                 class="tasks__item"
                 :class="{ 'is-active': selectedId === item.id }"
                 :title="`${item.title} · ${formatDateTime(item.updatedAt)}`"
                 @click="select(item.id)"
-                @contextmenu="openMenu($event, item)"
               >
                 <span class="tasks__item-title">{{ item.title }}</span>
                 <span class="tasks__item-time">{{ formatRelativeTime(item.updatedAt) }}</span>
@@ -555,28 +407,12 @@ onMounted(() => {
                 <span class="tasks__space-name">{{ group.label }}</span>
               </div>
               <template v-for="item in group.items" :key="item.id">
-                <div v-if="renamingId === item.id" class="tasks__item is-editing is-child">
-                  <input
-                    :ref="bindRenameInput"
-                    v-model="renamingTitle"
-                    class="tasks__rename"
-                    type="text"
-                    maxlength="200"
-                    aria-label="重命名对话"
-                    @click.stop
-                    @keydown.enter.prevent="commitRename"
-                    @keydown.esc.prevent="cancelRename"
-                    @blur="commitRename"
-                  />
-                </div>
                 <button
-                  v-else
                   type="button"
                   class="tasks__item is-child"
                   :class="{ 'is-active': selectedId === item.id }"
                   :title="`${item.title} · ${formatDateTime(item.updatedAt)}`"
                   @click="select(item.id)"
-                  @contextmenu="openMenu($event, item)"
                 >
                   <span class="tasks__item-title">{{ item.title }}</span>
                   <span class="tasks__item-time">{{ formatRelativeTime(item.updatedAt) }}</span>
@@ -701,66 +537,6 @@ onMounted(() => {
           description="在左侧点开任意对话即可在这里阅读全文，需要接着聊时再点「继续对话」。"
         />
       </section>
-    </div>
-
-    <!-- 右键菜单：重命名 / 删除（fixed 跟随鼠标） -->
-    <div
-      v-if="menu"
-      class="tasks__menu"
-      role="menu"
-      :style="{ left: `${menuLeft}px`, top: `${menuTop}px` }"
-      @click.stop
-      @contextmenu.prevent.stop
-    >
-      <template v-if="menu.mode === 'menu'">
-        <button
-          type="button"
-          class="tasks__menu-item"
-          role="menuitem"
-          @click.stop="startRename(menu.conversation)"
-        >
-          <Pencil :size="13" :stroke-width="1.8" />
-          <span>重命名</span>
-        </button>
-        <button
-          type="button"
-          class="tasks__menu-item"
-          role="menuitem"
-          @click.stop="beginClearConfirm"
-        >
-          <Eraser :size="13" :stroke-width="1.8" />
-          <span>清空消息</span>
-        </button>
-        <button
-          type="button"
-          class="tasks__menu-item is-danger"
-          role="menuitem"
-          @click.stop="beginDeleteConfirm"
-        >
-          <Trash2 :size="13" :stroke-width="1.8" />
-          <span>删除对话</span>
-        </button>
-      </template>
-      <template v-else-if="menu.mode === 'confirm-clear'">
-        <p class="tasks__menu-hint">
-          将删除该对话的全部消息，对话本身保留。此操作不可撤销，确认清空？
-        </p>
-        <div class="tasks__menu-actions">
-          <button type="button" class="tasks__menu-confirm is-danger" @click.stop="confirmClear">
-            清空
-          </button>
-          <button type="button" class="tasks__menu-confirm" @click.stop="closeMenu">取消</button>
-        </div>
-      </template>
-      <template v-else>
-        <p class="tasks__menu-hint">删除后不可恢复，确认删除该对话？</p>
-        <div class="tasks__menu-actions">
-          <button type="button" class="tasks__menu-confirm is-danger" @click.stop="confirmDelete">
-            删除
-          </button>
-          <button type="button" class="tasks__menu-confirm" @click.stop="closeMenu">取消</button>
-        </div>
-      </template>
     </div>
   </div>
 </template>
@@ -1244,113 +1020,6 @@ onMounted(() => {
 .tasks__time {
   color: var(--color-text-tertiary);
   font-size: 11px;
-}
-
-/* —— 内联重命名 —— */
-.tasks__item.is-editing {
-  padding: var(--space-1) var(--space-2);
-  background: var(--color-surface-hover);
-}
-
-.tasks__rename {
-  width: 100%;
-  height: 26px;
-  padding: 0 var(--space-2);
-  color: var(--color-text);
-  border: 1px solid var(--color-accent);
-  border-radius: 7px;
-  background: var(--color-canvas);
-  font-family: inherit;
-  font-size: var(--text-footnote);
-  outline: none;
-}
-
-/* —— 右键菜单 —— */
-.tasks__menu {
-  position: fixed;
-  z-index: var(--z-dropdown);
-  display: flex;
-  min-width: 200px;
-  max-width: 280px;
-  padding: 4px;
-  flex-direction: column;
-  gap: 2px;
-  background: var(--material-topbar);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  box-shadow: var(--shadow-menu);
-  backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
-  -webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
-}
-
-.tasks__menu-item {
-  display: flex;
-  width: 100%;
-  height: 30px;
-  padding: 0 var(--space-3);
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-secondary);
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  font-family: inherit;
-  font-size: var(--text-footnote);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
-}
-
-.tasks__menu-item:hover {
-  color: var(--color-text);
-  background: var(--color-surface-hover);
-}
-
-.tasks__menu-item.is-danger:hover {
-  color: var(--color-danger);
-  background: var(--color-danger-soft);
-}
-
-.tasks__menu-hint {
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  color: var(--color-text-secondary);
-  font-size: var(--text-caption);
-  line-height: var(--line-height-normal);
-}
-
-.tasks__menu-actions {
-  display: flex;
-  gap: var(--space-2);
-  padding: 0 var(--space-3) var(--space-2);
-}
-
-.tasks__menu-confirm {
-  flex: 1;
-  height: 26px;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 7px;
-  background: transparent;
-  font-family: inherit;
-  font-size: var(--text-caption);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
-}
-
-.tasks__menu-confirm:hover {
-  color: var(--color-text);
-  background: var(--color-surface-hover);
-}
-
-.tasks__menu-confirm.is-danger {
-  color: var(--color-on-danger);
-  border-color: transparent;
-  background: var(--color-danger);
 }
 
 .is-spinning {
