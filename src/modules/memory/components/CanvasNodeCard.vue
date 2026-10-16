@@ -96,6 +96,17 @@ function startEdit(): void {
   editing.value = true;
 }
 
+/**
+ * 节点上的双击：便签进编辑，媒体进预览。
+ *
+ * 必须 stopPropagation：否则事件冒泡到 pane，会同时触发「在该位置新建便签」
+ * 和 d3-zoom 的「双击缩放」—— 双击节点就变成「放大 + 凭空多出一个节点」。
+ */
+function onNodeDoubleClick(): void {
+  if (isNote.value) startEdit();
+  else props.data.onPreview?.();
+}
+
 // 菜单里的「编辑」由面板经 editSignal 递增触发
 watch(
   () => props.data.editSignal,
@@ -248,6 +259,7 @@ watch(
     class="canvas-node"
     :style="rootStyle"
     @contextmenu.stop.prevent="onNodeContextMenu($event)"
+    @dblclick.stop="onNodeDoubleClick"
   >
     <!-- Handles for edge connections -->
     <Handle type="target" :position="Position.Left" :style="{ background: nodeColor }" />
@@ -273,12 +285,7 @@ watch(
     </div>
 
     <!-- Thumbnail (for image/upload/video nodes with dataUrl) -->
-    <div
-      v-if="showThumbnail"
-      class="canvas-node__thumb"
-      title="双击放大预览"
-      @dblclick.stop="data.onPreview?.()"
-    >
+    <div v-if="showThumbnail" class="canvas-node__thumb" title="双击放大预览">
       <video
         v-if="isVideoNode"
         :src="thumbnailUrl!"
@@ -299,7 +306,7 @@ watch(
       />
     </div>
 
-    <!-- Note editing（双击便签编辑内容） -->
+    <!-- Note editing（双击便签编辑内容；双击由根元素统一处理） -->
     <div v-if="isNote && editing" class="canvas-node__edit">
       <textarea
         v-model="editText"
@@ -309,12 +316,7 @@ watch(
         @blur="saveEdit"
       />
     </div>
-    <div
-      v-else-if="!editing"
-      class="canvas-node__summary"
-      :title="data.summary"
-      @dblclick="startEdit"
-    >
+    <div v-else-if="!editing" class="canvas-node__summary" :title="data.summary">
       {{ data.summary }}
     </div>
 

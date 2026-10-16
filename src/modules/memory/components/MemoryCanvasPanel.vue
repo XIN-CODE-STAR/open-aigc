@@ -327,7 +327,9 @@ const {
     animated: true,
     style: { stroke: "var(--canvas-node-script)", strokeWidth: 2 },
   },
-  fitViewOnInit: true,
+  // 初始视图由 initCanvas() 负责（恢复保存的视口，否则 fitView）。
+  // 这里不能再开 fitViewOnInit：两条路径会互相覆盖。
+  fitViewOnInit: false,
   snapToGrid: true,
   snapGrid: [20, 20] as [number, number],
 });
@@ -393,6 +395,16 @@ function onCanvasKeydown(event: KeyboardEvent): void {
   }
 
   if (event.altKey) return;
+
+  // 删除走 deleteSelected()：与工具栏删除按钮同一条路径（打包成一条可撤销
+  // 的历史）。此前交给 vue-flow 的 delete-key-code，会给每个节点/连线各推一条
+  // 历史，删 N 个东西要按 N 次 Ctrl+Z，且与工具栏行为不一致。
+  if (key === "delete" || key === "backspace") {
+    event.preventDefault();
+    void deleteSelected();
+    return;
+  }
+
   if (key === "v") canvasTool.value = "select";
   else if (key === "n") canvasTool.value = "note";
   else if (key === "i") canvasTool.value = "image";
@@ -415,6 +427,8 @@ onUnmounted(() => {
   window.removeEventListener("paste", onCanvasPaste);
   document.removeEventListener("visibilitychange", flushOnHide);
   window.removeEventListener("pagehide", flushOnHide);
+  paneElement?.removeEventListener("dblclick", createNoteAtScreen);
+  paneElement = null;
   void flushPendingWrites(); // 离开画布时立即落库
 });
 
@@ -608,10 +622,42 @@ async function onPaneMenuSelect(action: string): Promise<void> {
 
 // ── 双击空白处：在该位置新建便签 ──
 
-function onPaneDblClick(event: MouseEvent): void {
+function createNoteAtScreen(event: MouseEvent): void {
   const flow = screenToFlowCoordinate({ x: event.clientX, y: event.clientY });
   void addNoteNodeAt(flow.x, flow.y).then(centerOnNode);
 }
+
+/**
+ * 注意：这里**不能**用 vue-flow 的 `@pane-double-click`。
+ *
+ * 该事件的发射挂在 d3-zoom 的事件过滤器上，而过滤器里有这么一条：
+ *     if (!zoomOnDoubleClick && event.type === "dblclick") return false
+ * 也就是说，一旦关掉「双击缩放」（修 bug 必须关，否则双击节点会被放大），
+ * `pane-double-click` 就连带不再触发了。
+ *
+ * 所以改为直接监听 pane 元素的原生 dblclick。节点上的双击已 `.stop`，
+ * 不会冒泡到这里，因此只有「落在空白处」的双击才会新建便签。
+ *
+ * 另外：vue-flow 的 pane DOM 比父组件的 onMounted 晚一帧出现，所以轮询获取。
+ */
+let paneElement: HTMLElement | null = null;
+
+onMounted(() => {
+  void nextTick(() => {
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      paneElement = document.querySelector<HTMLElement>(".memory-canvas .vue-flow__pane");
+      if (paneElement) {
+        window.clearInterval(timer);
+        paneElement.addEventListener("dblclick", createNoteAtScreen);
+      } else if (tries > 60) {
+        // 3 秒还没出现说明结构变了，停表避免空转
+        window.clearInterval(timer);
+      }
+    }, 50);
+  });
+});
 
 // ── 剪贴板粘贴（Ctrl+V）：图片优先，其次粘贴已复制的节点 ──
 
@@ -867,15 +913,22 @@ async function initCanvas(): Promise<void> {
   knownEdgeIds.clear();
   edgesHydrated = false;
   await loadCanvas(props.conversationId);
+  if (nodes.value.length === 0) return;
+
+  // 等一帧让节点完成测量 —— fitView / setViewport 都依赖节点尺寸，
+  // 节点刚插入时量到的是 0，会导致适配范围错误。
+  await nextTick();
+  await new Promise((resolve) => setTimeout(resolve, 60));
+
   const vp = viewport.value;
   if (vp) {
-    await nextTick();
-    setTimeout(() => setViewport({ zoom: vp.zoom, x: vp.x, y: vp.y }), 120);
+    // 有保存过的视口就恢复它：用户调好的缩放/位置不应每次进来都被重置。
+    // duration 0 = 不做过渡，避免从默认视口「飞」过去。
+    await setViewport({ zoom: vp.zoom, x: vp.x, y: vp.y }, { duration: 0 });
+    return;
   }
-  await nextTick();
-  if (nodes.value.length > 0) {
-    setTimeout(() => fitView({ padding: 0.2 }), 100);
-  }
+  // 首次/从未保存过：把内容摆进视野，并夹在允许的缩放区间内
+  await fitView({ padding: 0.2, minZoom: 0.2, maxZoom: 3 });
 }
 
 watch(
@@ -958,6 +1011,7 @@ defineExpose({
         :zoom-on-scroll="true"
         :zoom-on-pinch="true"
         :pan-on-scroll="false"
+        :zoom-on-double-click="false"
         :connection-line-style="{
           stroke: 'var(--canvas-node-audio)',
           strokeWidth: 2,
@@ -966,10 +1020,8 @@ defineExpose({
         :connection-radius="30"
         :elevate-nodes-on-select="true"
         :only-render-visible-elements="nodes.length > 40"
-        :delete-key-code="['Backspace', 'Delete']"
         @pane-click="onPaneClick"
         @edge-context-menu="onEdgeContextMenu"
-        @pane-double-click="onPaneDblClick"
       >
         <template #node-canvasCard="nodeProps">
           <CanvasNodeCard v-bind="nodeProps" />
@@ -1152,7 +1204,7 @@ defineExpose({
         <!-- 顶部悬浮条（玻璃拟态） -->
         <header class="canvas-topbar">
           <span class="canvas-topbar__brand" />
-          <span class="canvas-topbar__title">工作记忆画布</span>
+          <span class="canvas-topbar__title">记忆画布</span>
           <span class="canvas-topbar__stats"
             >{{ nodes.length }} 节点 · {{ edges.length }} 连线</span
           >
