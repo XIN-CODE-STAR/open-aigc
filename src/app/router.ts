@@ -36,7 +36,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: "/canvas",
     component: MemoryCanvasPage,
-    meta: { title: "工作记忆画布" },
+    meta: { title: "记忆画布" },
   },
   {
     path: "/prompts",

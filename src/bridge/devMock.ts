@@ -542,7 +542,7 @@ const MOCKS: Record<string, MockHandler> = {
   memory_canvas_v1_get: () => demoCanvasRecord(),
   memory_canvas_v1_create: (args) => {
     const request = requestOf(args);
-    return { ...demoCanvasRecord(), name: optionalString(request.name) ?? "工作记忆画布" };
+    return { ...demoCanvasRecord(), name: optionalString(request.name) ?? "记忆画布" };
   },
   memory_canvas_v1_delete: () => undefined,
 

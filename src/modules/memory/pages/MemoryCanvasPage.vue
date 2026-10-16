@@ -1,20 +1,27 @@
 <script setup lang="ts">
 /**
- * MemoryCanvasPage：「工作记忆画布」独立工作区。
+ * MemoryCanvasPage：「记忆画布」独立工作区。
  *
  * 画布本身是「每会话一份」（后端按 `conv-<conversationId>` 命名查找），
- * 因此本页按以下顺序解析目标画布：
+ * 因此目标画布按以下顺序解析：
  *   1) URL 上的 `?conversation=<id>`（从任务/侧栏带过来时）；
- *   2) 否则取最近更新的一次会话；
- *   3) 都没有时传 null —— 画布为空，仍可手动添加节点。
+ *   2) 当前活跃会话 —— 用户在创意工坊里正在查看或运行的那个
+ *      （跨页共享，见 stores/activeConversation）；
+ *   3) 最近更新的一次会话；
+ *   4) 都没有时传 null —— 画布为空，仍可手动添加节点。
+ *
+ * 第 2 级不能省、也不能换成「最近更新」：用户在多个会话之间来回切换时，
+ * 按更新时间取会跳到别的会话的画布上。
  */
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import { listConversations, type ConversationRecord } from "../../../bridge/agent";
 import MemoryCanvasPanel from "../components/MemoryCanvasPanel.vue";
+import { useActiveConversationStore } from "../../../app/stores/activeConversation";
 
 const router = useRouter();
+const activeConversation = useActiveConversationStore();
 
 const conversations = ref<ConversationRecord[]>([]);
 const ready = ref(false);
@@ -22,6 +29,8 @@ const ready = ref(false);
 const conversationId = computed<string | null>(() => {
   const fromQuery = router.currentRoute.value.query.conversation;
   if (typeof fromQuery === "string" && fromQuery.length > 0) return fromQuery;
+  const active = activeConversation.id;
+  if (active && conversations.value.some((item) => item.id === active)) return active;
   return conversations.value[0]?.id ?? null;
 });
 

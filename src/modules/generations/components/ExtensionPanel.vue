@@ -23,7 +23,7 @@ interface ToolItem {
 const builtinTools: ToolItem[] = [
   { name: "image_generation", description: "生成图片：文生图 / 图生图（自动使用对话参考图）" },
   { name: "video_generation", description: "生成视频：文生视频 / 图生视频" },
-  { name: "canvas_search", description: "检索工作记忆画布上的节点内容" },
+  { name: "canvas_search", description: "检索记忆画布上的节点内容" },
   { name: "canvas_add_note", description: "在画布上创建便签节点（自动关联相关节点）" },
   { name: "canvas_connect", description: "在画布上两个节点间建立连线" },
   { name: "analyze_image", description: "使用视觉模型深度分析图片内容" },

@@ -43,6 +43,7 @@ import {
 import CreativeMemoryPanel from "../components/CreativeMemoryPanel.vue";
 import { queueV1SubmitAttempt } from "../../../bridge/queue";
 import { useProjectDirectory } from "../../../app/stores/projectDirectory";
+import { useActiveConversationStore } from "../../../app/stores/activeConversation";
 import { useShellActionsStore } from "../../../app/stores/shellActions";
 import type { AttachmentInput } from "../../../bridge/agent";
 import { useSemanticAnalysis } from "../composables/useSemanticAnalysis";
@@ -160,6 +161,7 @@ const workspace = useWorkspaceStore();
 const history = useGenerationHistory();
 const agent = useAgentConversation();
 const projectDir = useProjectDirectory();
+const activeConversation = useActiveConversationStore();
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
@@ -642,12 +644,16 @@ watch(
   { immediate: true },
 );
 
-// 切换对话时更新侧边栏上下文名称
+// 切换对话时更新侧边栏上下文名称，并同步「当前活跃会话」
+//（记忆画布按会话取用；不同步的话打开画布会回退到「最近更新的会话」，在多个
+// 会话来回切换时跳错地方）
 watch(
   () => agentConversation.value?.id,
-  () => {
+  (id) => {
     projectDir.setContextName(agentConversation.value?.title ?? null);
+    activeConversation.set(id ?? null);
   },
+  { immediate: true },
 );
 
 // 回到欢迎页（无对话）时清除上下文名称
@@ -656,6 +662,7 @@ watch(
   (convId) => {
     if (!convId) {
       projectDir.setContextName(null);
+      activeConversation.set(null);
     }
   },
 );
@@ -1055,7 +1062,7 @@ async function sendAgentMessage(
     }
     await agent.sendMessage(prompt, buildAttachments(), skillOverride);
     if (!agent.errorMessage.value) {
-      // 生成结果由后端直写入工作记忆画布（独立工作区 /canvas 可见），
+      // 生成结果由后端直写入记忆画布（独立工作区 /canvas 可见），
       // 前端此处不再镜像节点，避免两套状态互相覆盖。
       promptText.value = "";
       referenceImages.value = [];
