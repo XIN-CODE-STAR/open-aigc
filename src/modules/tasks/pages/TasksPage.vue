@@ -39,6 +39,7 @@ import EmptyState from "../../../shared/ui/EmptyState.vue";
 import { useConversationWorkspaces } from "../../../app/composables/useConversationWorkspaces";
 import { useConversationList } from "../../../app/composables/useConversationList";
 import { useShellActionsStore } from "../../../app/stores/shellActions";
+import { useNow } from "../../../shared/composables/useNow";
 import { formatDateTime, formatRelativeTime } from "../../../shared/utils/time";
 import {
   isVideoUrl,
@@ -49,6 +50,8 @@ import {
 const router = useRouter();
 const conversationWorkspaces = useConversationWorkspaces();
 const shellActions = useShellActionsStore();
+// 相对时间需要一个会自己走的「现在」（与侧栏同因，见 useNow 注释）
+const now = useNow();
 
 /** 默认分组名：未登记工作目录的对话归入应用自身。 */
 const DEFAULT_GROUP = "OPEN AIGC";
@@ -391,7 +394,7 @@ onMounted(() => {
                 @click="select(item.id)"
               >
                 <span class="tasks__item-title">{{ item.title }}</span>
-                <span class="tasks__item-time">{{ formatRelativeTime(item.updatedAt) }}</span>
+                <span class="tasks__item-time">{{ formatRelativeTime(item.updatedAt, now) }}</span>
               </button>
             </template>
           </section>
@@ -415,7 +418,9 @@ onMounted(() => {
                   @click="select(item.id)"
                 >
                   <span class="tasks__item-title">{{ item.title }}</span>
-                  <span class="tasks__item-time">{{ formatRelativeTime(item.updatedAt) }}</span>
+                  <span class="tasks__item-time">{{
+                    formatRelativeTime(item.updatedAt, now)
+                  }}</span>
                 </button>
               </template>
             </div>

@@ -57,6 +57,14 @@ export interface AgentMessageGroup {
   toolResults: MessageRecord[];
 }
 
+/** 会话列表发生变化时广播的事件名（侧栏 / 任务页监听它重新拉取）。 */
+const CONVERSATIONS_CHANGED_EVENT = "aigc-agent-conversations-updated";
+
+/** 广播「会话列表已变化」。 */
+function notifyConversationsChanged(): void {
+  window.dispatchEvent(new CustomEvent(CONVERSATIONS_CHANGED_EVENT));
+}
+
 /**
  * 管理 Agent 会话列表、当前会话的消息与工具调用记录，
  * 并通过 Tauri 事件实时同步后端 ReAct 循环的进度。
@@ -553,6 +561,9 @@ export function useAgentConversation() {
         lastSentContent = null;
         lastSentConversationId = null;
       }
+      // 通知侧栏/任务页重新拉取：它们共享同一份列表，但只有收到事件才会
+      // 去服务端刷新（否则删掉的会话要等下一次创建才消失）。
+      notifyConversationsChanged();
       return true;
     } catch (error) {
       setError(error);
@@ -606,6 +617,8 @@ export function useAgentConversation() {
     try {
       await clearConversationIpc(conversation.id);
       resetConversationView();
+      // 消息没了但会话还在：刷新一次让任务页回放区/侧栏时间同步
+      notifyConversationsChanged();
       return true;
     } catch (error) {
       setError(error);
@@ -654,6 +667,9 @@ export function useAgentConversation() {
         invocations.value = invRecords;
       }
       await refreshCurrent();
+      // 后端 append_message 会 touch updated_at，但侧栏/任务页手里是缓存副本，
+      // 不通知的话「刚聊过的会话」在列表里仍显示旧时间，直到发生创建/删除。
+      notifyConversationsChanged();
     } catch (error) {
       setError(error);
     } finally {
