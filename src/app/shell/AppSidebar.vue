@@ -8,7 +8,6 @@
  */
 import { computed, onMounted, onUnmounted, type Component } from "vue";
 import {
-  Archive,
   BookOpenText,
   Bot,
   Folder,
@@ -33,6 +32,7 @@ import { useShellActionsStore } from "../stores/shellActions";
 import { useMemoryCanvasStore } from "../stores/memoryCanvas";
 import { useConversationWorkspaces } from "../composables/useConversationWorkspaces";
 import { useConversationList } from "../composables/useConversationList";
+import { useNow } from "../../shared/composables/useNow";
 import { formatRelativeTime } from "../../shared/utils/time";
 
 const preferences = usePreferencesStore();
@@ -46,6 +46,10 @@ const {
   refresh: refreshConversations,
   ensureLoaded,
 } = useConversationList();
+
+// 相对时间需要一个会自己走的「现在」：桌面应用常开一整天，列表不重渲染的话
+// 标签会停在过期分桶上（已经两天了还写「1天前」）。
+const now = useNow();
 
 const expanded = computed(() => preferences.navigationExpanded);
 const route = useRoute();
@@ -126,22 +130,28 @@ interface NavItem {
   icon: Component;
 }
 
+/**
+ * 导航分组：
+ * - 工作区：干活的地方（创作 + 画布）
+ * - 资源：被创作、被引用的素材与配置（资产 / 提示词 / 模型 / 插件）
+ *
+ * 备份不在侧栏：低频运维操作，入口收在「设置 → 存储」里（见 SettingsPage）。
+ */
 const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: "工作区",
     items: [
       { path: "/generations", label: "创意工坊", icon: Sparkles },
-      { path: "/canvas", label: "工作记忆画布", icon: Waypoints },
-      { path: "/assets", label: "资产库", icon: Images },
-      { path: "/prompts", label: "提示词库", icon: BookOpenText },
+      { path: "/canvas", label: "记忆画布", icon: Waypoints },
     ],
   },
   {
     label: "资源",
     items: [
+      { path: "/assets", label: "资产库", icon: Images },
+      { path: "/prompts", label: "提示词库", icon: BookOpenText },
       { path: "/models", label: "模型", icon: Bot },
       { path: "/plugins", label: "插件", icon: Puzzle },
-      { path: "/backup", label: "备份", icon: Archive },
     ],
   },
 ];
@@ -184,7 +194,7 @@ const localStatus = computed(() => {
     <nav class="sidebar__nav" aria-label="主功能">
       <div v-for="group in navGroups" :key="group.label" class="nav-group">
         <h2 v-if="expanded" class="nav-group__title">{{ group.label }}</h2>
-        <!-- 动作型项（工作记忆画布）用 button 而非 RouterLink：
+        <!-- 动作型项（记忆画布）用 button 而非 RouterLink：
              RouterLink 指向 /generations 会抹掉当前会话的 ?conversation= 参数。
              动态组件保证两类项仍按声明顺序排列。 -->
         <RouterLink
@@ -216,7 +226,9 @@ const localStatus = computed(() => {
           :title="item.title"
         >
           <span class="sidebar-tasks__item-title">{{ item.title }}</span>
-          <span class="sidebar-tasks__item-time">{{ formatRelativeTime(item.updatedAt) }}</span>
+          <span class="sidebar-tasks__item-time">{{
+            formatRelativeTime(item.updatedAt, now)
+          }}</span>
         </RouterLink>
       </section>
 
@@ -238,7 +250,9 @@ const localStatus = computed(() => {
             :title="item.title"
           >
             <span class="sidebar-tasks__item-title">{{ item.title }}</span>
-            <span class="sidebar-tasks__item-time">{{ formatRelativeTime(item.updatedAt) }}</span>
+            <span class="sidebar-tasks__item-time">{{
+              formatRelativeTime(item.updatedAt, now)
+            }}</span>
           </RouterLink>
         </div>
       </section>

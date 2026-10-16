@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import type { Component } from "vue";
+import { useRouter } from "vue-router";
 
 import { version as appVersion } from "../../../../package.json";
 import {
@@ -47,6 +48,12 @@ interface SegmentedOption<T extends string> {
 const preferences = usePreferencesStore();
 const projectDir = useProjectDirectory();
 const toast = useToast();
+const router = useRouter();
+
+/** 备份是低频运维操作，入口收在设置里（侧栏「资源」已移除该项）。 */
+function gotoBackup(): void {
+  void router.push("/backup");
+}
 
 // ── 长期记忆（EverOS）──
 const everosStatus = ref<MemoryStatus | null>(null);
@@ -386,6 +393,20 @@ function onMaxTokensInput(event: Event): void {
         >
           恢复默认
         </button>
+      </div>
+    </section>
+
+    <!-- ═══ 数据备份 ═══ -->
+    <section class="settings-section" aria-labelledby="backup-title">
+      <div class="setting-copy">
+        <h2 id="backup-title">数据备份</h2>
+        <p>
+          手动导出或恢复应用数据（对话历史、资产索引、配置）。建议在更换设备或清理磁盘前先做一次备份。
+        </p>
+      </div>
+      <div class="dir-display">
+        <span class="dir-path">备份 / 恢复</span>
+        <button type="button" class="btn-secondary" @click="gotoBackup">打开</button>
       </div>
     </section>
 

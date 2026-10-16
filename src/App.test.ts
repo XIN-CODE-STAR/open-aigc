@@ -46,10 +46,17 @@ describe("App", () => {
 
     expect(mounted.wrapper.get("h1").text()).toBe("设置");
     const mainNavigation = mounted.wrapper.get('[aria-label="主导航"]').text();
+    // 工作区：创作与画布
     expect(mainNavigation).toContain("创意工坊");
+    expect(mainNavigation).toContain("记忆画布");
+    // 资源：被创作/被引用的素材与配置
     expect(mainNavigation).toContain("资产库");
     expect(mainNavigation).toContain("提示词库");
-    expect(mainNavigation).toContain("备份");
+    expect(mainNavigation).toContain("模型");
+    expect(mainNavigation).toContain("插件");
+    // 备份是低频运维操作，入口收在设置里，不再占侧栏
+    expect(mainNavigation).not.toContain("备份");
+    expect(mounted.wrapper.text()).toContain("数据备份");
   });
 
   it("changes and persists the color theme", async () => {
